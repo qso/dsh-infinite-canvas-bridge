@@ -16,7 +16,20 @@ function jsonText(value) {
 }
 
 function getSessionIdFromExec(exec) {
-  return exec?.agent?.session?.id ?? exec?.agent?.sessionId ?? 'default';
+  const id = exec?.agent?.session?.id ?? exec?.agent?.sessionId;
+  if (!id) throw new Error('No active DSH session.');
+  return id;
+}
+
+function sessionImages(session) {
+  const images = new Map();
+  for (const event of session?.snapshotEvents?.() || []) {
+    if (event.type !== 'user/message') continue;
+    for (const block of event.data.content || []) {
+      if (block?.type === 'image' && block.attachment?.attachmentId) images.set(block.attachment.attachmentId, block.attachment);
+    }
+  }
+  return images;
 }
 
 function parseSkillMarkdown(raw, filePath) {
@@ -80,7 +93,7 @@ export function registerAgentIntegration(ctx, bridgeService) {
           title: args.title,
           dataDir: args.data_dir,
         });
-        bridgeService.requestOpenUi(sessionId, { mode: 'recent' });
+        bridgeService.requestOpenUi(sessionId);
         const status = await bridgeService.getStatus(res.scope, sessionId, { autoStart: true });
         return {
           created: res.created,
@@ -102,7 +115,7 @@ export function registerAgentIntegration(ctx, bridgeService) {
           mode: {
             type: 'string',
             enum: ['recent', 'new', 'choose'],
-            description: 'Which canvas to open when projectId is not specified (default: "recent").',
+            description: 'Omit to resume this session, or start a blank canvas on first use. new always creates a blank canvas; choose opens the picker.',
           },
           projectId: {
             type: 'string',
@@ -119,9 +132,9 @@ export function registerAgentIntegration(ctx, bridgeService) {
         const scope = await resolveScopeForAgent(ctx, exec?.agent);
         if (!scope?.active) throw new Error('Current folder is not an Infinite Canvas project.');
         const sessionId = getSessionIdFromExec(exec);
-        await bridgeService.ensureStarted(scope);
+        await bridgeService.selectCanvas(scope, sessionId, args.mode || 'resume', args.projectId);
         const intent = bridgeService.requestOpenUi(sessionId, {
-          mode: args.mode || 'recent',
+          mode: args.mode || 'resume',
           projectId: args.projectId || null,
         });
         const status = await bridgeService.getStatus(scope, sessionId, { autoStart: false });
@@ -131,7 +144,9 @@ export function registerAgentIntegration(ctx, bridgeService) {
           clientConnected: status.clientConnected,
           activeCanvas: status.activeCanvas,
           url: status.instance?.url ?? null,
-          hint: status.clientConnected
+          readOnly: status.readOnly,
+          choosing: status.binding.choosing,
+          hint: status.binding.choosing ? 'Choose a canvas in the picker or call canvas_open with an explicit projectId.' : status.readOnly ? 'This canvas is open read-only. Release the editor in the other window before taking over.' : status.clientConnected
             ? 'Canvas is already connected and ready for canvas_get_state / canvas_apply_ops.'
             : 'Requested DeepSeek Harness UI to open the Infinite Canvas right-sidebar tab. Wait 1-2 seconds if needed before calling canvas_get_state.',
         };
@@ -145,21 +160,12 @@ export function registerAgentIntegration(ctx, bridgeService) {
         description: def.description,
         parameters: def.parameters,
         output: {
-          schema: { type: 'object', additionalProperties: true },
+          schema: def.name === 'canvas_list_references'
+            ? { type: 'array', items: { type: 'object', additionalProperties: true } }
+            : { type: 'object', additionalProperties: true },
           render: (_args, value) => {
-            if (def.name === 'canvas_view_image' && value && typeof value === 'object' && value.image?.data && value.image?.mimeType) {
-              const { image, ...rest } = value;
-              return [
-                {
-                  type: 'image',
-                  data: image.data,
-                  mimeType: image.mimeType,
-                },
-                {
-                  type: 'text',
-                  text: JSON.stringify(rest, null, 2),
-                },
-              ];
+            if (def.name === 'canvas_view_image') {
+              return [{ type: 'image', attachment: value.attachment }, ...jsonText({ storageKey: value.storageKey })];
             }
             return jsonText(value);
           },
@@ -167,7 +173,32 @@ export function registerAgentIntegration(ctx, bridgeService) {
         async execute(args, exec) {
           const scope = await resolveScopeForAgent(ctx, exec?.agent);
           const sessionId = getSessionIdFromExec(exec);
-          return await bridgeService.callCanvasTool(scope, sessionId, def.name, args || {}, exec?.signal);
+          const call = (name, input) => bridgeService.callCanvasTool(scope, sessionId, name, input, exec.signal);
+          if (def.name === 'canvas_insert_media' && args.attachmentId) {
+            const ref = sessionImages(exec.agent.session).get(args.attachmentId);
+            if (!ref || args.assetId || args.storageKey) throw new Error('Choose one image from the current conversation.');
+            const attachments = ctx.get('attachments');
+            if (!attachments) throw new Error('DSH attachment storage is unavailable.');
+            const { data } = await attachments.readImage(ref, exec.signal);
+            const target = args.projectId || bridgeService.getSessionBinding(sessionId).projectId;
+            const asset = await call('assets_add', { projectId: target, kind: 'image', title: args.title || ref.name || 'DSH image',
+              imageUrl: 'data:' + ref.mediaType + ';base64,' + Buffer.from(data).toString('base64') });
+            const { attachmentId, ...placement } = args;
+            try { return await call('canvas_insert_media', { ...placement, projectId: target, assetId: asset.id }); }
+            catch (error) { throw new Error(`Image imported as assetId=${asset.id}. Retry placement using this assetId. ${error.message}`); }
+          }
+          const value = await call(def.name, args || {});
+          if (def.name === 'canvas_list_references') {
+            return [...value, ...Array.from(sessionImages(exec.agent.session).values(), ({ attachmentId, name, width, height }) =>
+              ({ attachmentId, name: name || 'DSH image', width, height, source: 'DSH' }))];
+          }
+          if (def.name === 'canvas_view_image') {
+            const attachments = ctx.get('attachments');
+            if (!attachments || !value.image?.data) throw new Error('No image bytes or DSH attachment storage available.');
+            const attachment = await attachments.saveImage({ data: Buffer.from(value.image.data, 'base64'), mediaType: value.image.mimeType });
+            return { storageKey: value.storageKey, attachment };
+          }
+          return value;
         },
       }, { when: whenActive }), `dsh-infinite-canvas-bridge: tool ${def.name}`);
     }
@@ -223,23 +254,23 @@ export function registerAgentIntegration(ctx, bridgeService) {
 
   // 2. Conditional systemPrompt section
   ctx.inject(['systemPrompt'], (scopeCtx) => {
-    scopeCtx.effect(() => scopeCtx.systemPrompt.section({
-      id: 'infinite-canvas-bridge:workspace-context',
-      priority: 45,
-      async render({ agent }) {
-        const scope = await resolveScopeForAgent(ctx, agent);
-        if (!scope?.active) return '';
-        return [
+    scopeCtx.on('system-prompt/assemble', async (_assembly, context, next) => {
+        const scope = await resolveScopeForAgent(ctx, context.agent);
+        if (!scope?.active) return next();
+        const text = [
           `当前工作目录已启用「无限画布（Infinite Canvas）」自由创作工程：${scope.title}（数据持久化目录：${scope.dataDir}）。`,
           '你可以直接通过 canvas_* 原生工具实时读取和修改用户在右侧边栏看到的画布，无需让用户手动拖拽或复制 JSON。',
           '关键规则：',
           '1) 若画布尚未连接，先调用 canvas_open 打开右侧画布面板；首次操作先用 canvas_get_state 了解画布并记住 projectId 传给后续调用。',
           '2) 创作图片/视频/音频/文本时，默认先调 canvas_list_models 查询可用模型 ID（不要猜模型名），再通过 canvas_create_generation_flow（设置 autoRun=true）或 canvas_apply_ops(run_generation) 让画布节点直接触发生成，保持流程可视化可复编辑。',
           '3) submittedNodeIds 仅代表已提交，需用 generation_get_status 查询结果；需要审图时用 canvas_view_image 查看图片内容。',
+          '需要会话参考图时，用 canvas_list_references 取得 attachmentId，再用 canvas_insert_media 插入。音乐等扩展能力先用 canvas_list_plugin_tools 发现。',
           '4) 修改完画布后，简明告知用户你新增/修改/连线了哪些节点，以便用户在右侧画布即时查看或继续对话迭代。',
         ].join('\n');
-      },
-    }), 'dsh-infinite-canvas-bridge: conditional systemPrompt');
+        const assembly = await next();
+        assembly.sections.push({ name: 'infinite-canvas-bridge', text, interpolate: false });
+        return assembly;
+    });
   });
 
   // 3. Slash command /canvas-init
@@ -262,7 +293,7 @@ export function registerAgentIntegration(ctx, bridgeService) {
         }
         const res = await bridgeService.initProject(dir, { title: rawInput?.trim() || undefined });
         const sessionId = agent?.session?.id ?? agent?.sessionId ?? 'default';
-        bridgeService.requestOpenUi(sessionId, { mode: 'recent' });
+        bridgeService.requestOpenUi(sessionId);
         return {
           kind: 'success',
           text: `已初始化无限画布工程：${res.scope.title}（${res.scope.markerPath}），作品持久化在 ${res.scope.dataDir}。`,

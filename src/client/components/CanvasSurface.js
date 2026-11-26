@@ -3,6 +3,7 @@ export function createCanvasSurface(React) {
   const { useEffect, useState } = React;
 
   function SettingsModal({ initialConfig, t, onClose, onSave }) {
+    const [newSessionCanvas, setNewSessionCanvas] = useState(initialConfig?.newSessionCanvas || 'blank');
     const [backendMode, setBackendMode] = useState(initialConfig?.backendMode || 'auto');
     const [repoPath, setRepoPath] = useState(initialConfig?.repoPath || '');
     const [repoRunMode, setRepoRunMode] = useState(initialConfig?.repoRunMode || 'built');
@@ -18,6 +19,7 @@ export function createCanvasSurface(React) {
       setErr('');
       try {
         await onSave({
+          newSessionCanvas,
           backendMode,
           repoPath: repoPath.trim(),
           repoRunMode,
@@ -42,6 +44,9 @@ export function createCanvasSurface(React) {
         h('div', { className: 'icb-card-title' }, t('settingsTitle')),
         h('div', { className: 'icb-card-desc' }, t('settingsHint')),
 
+        h('label', { className: 'icb-field' }, t('newSessionDefault'),
+          h('select', { className: 'icb-select', value: newSessionCanvas, onChange: e => setNewSessionCanvas(e.target.value) },
+            ['blank', 'open', 'choose'].map(value => h('option', { key: value, value }, t('default_' + value))))),
         h('div', { className: 'icb-field' },
           h('label', { className: 'icb-label' }, t('backendMode')),
           h('select', {
@@ -128,6 +133,41 @@ export function createCanvasSurface(React) {
     );
   }
 
+  function ProjectPicker({ sessionId, store, t, loading }) {
+    const [rows, setRows] = useState(null);
+    const [error, setError] = useState('');
+    useEffect(() => {
+      let active = true;
+      store.listProjects(sessionId).then(value => { if (active) setRows(value); },
+        cause => { if (active) setError(cause.message); });
+      return () => { active = false; };
+    }, [sessionId, store]);
+    return h('div', { className: 'icb-center' }, h('div', { className: 'icb-card' },
+      h('div', { className: 'icb-card-title' }, t('selectCanvas')),
+      error && h('p', { role: 'alert' }, error),
+      rows === null && !error && h('p', null, t('loadingTitle')),
+      (rows || []).map(row => h('button', { key: row.id, type: 'button', className: 'icb-btn', disabled: loading,
+        onClick: () => void store.selectCanvas(sessionId, 'resume', row.id) }, row.open ? row.title + ' · ' + t('alreadyOpen') : row.title)),
+      h('button', { className: 'icb-btn primary', disabled: loading, onClick: () => void store.selectCanvas(sessionId, 'new') }, t('newCanvas'))));
+  }
+
+  function LegacyFrame({ url, backend, title, t }) {
+    const [held, setHeld] = useState(false);
+    const origin = new URL(backend).origin;
+    useEffect(() => {
+      const controller = new AbortController();
+      let release;
+      setHeld(false);
+      navigator.locks?.request('infinite-canvas:' + origin, { signal: controller.signal }, async () => {
+        if (controller.signal.aborted) return;
+        setHeld(true);
+        await new Promise(resolve => { release = resolve; });
+      }).catch(() => {});
+      return () => { controller.abort(); release?.(); };
+    }, [origin]);
+    return held ? h('iframe', { className: 'icb-iframe', src: url, title }) : h('p', { role: 'status' }, t('legacyBusy'));
+  }
+
   return function CanvasSurface({ host, sessionId: explicitSessionId, store, t }) {
     const [, setTick] = useState(0);
     const [settingsOpen, setSettingsOpen] = useState(false);
@@ -186,7 +226,7 @@ export function createCanvasSurface(React) {
       ? t('statusInactive')
       : isConnected
         ? t('statusConnected')
-        : isRunning
+        : status?.readOnly ? t('statusReadOnly') : isRunning
           ? t('statusConnecting')
           : t('statusStopped');
 
@@ -207,24 +247,8 @@ export function createCanvasSurface(React) {
       }
     }
 
-    function openNewCanvas() {
-      if (!status?.instance?.url || !status?.binding?.clientId) return;
-      const u = new URL('/canvas', status.instance.url);
-      u.searchParams.set('mode', 'new');
-      u.searchParams.set('embed', 'dsh');
-      u.searchParams.set('dshClientId', status.binding.clientId);
-      store.setIframeUrlOverride(sessionId, u.toString());
-      setIframeNonce((n) => n + 1);
-    }
-
-    function openCanvasLibrary() {
-      if (!status?.instance?.url || !status?.binding?.clientId) return;
-      const u = new URL('/canvas', status.instance.url);
-      u.searchParams.set('embed', 'dsh');
-      u.searchParams.set('dshClientId', status.binding.clientId);
-      store.setIframeUrlOverride(sessionId, u.toString());
-      setIframeNonce((n) => n + 1);
-    }
+    function openNewCanvas() { void store.selectCanvas(sessionId, 'new'); }
+    function openCanvasLibrary() { void store.selectCanvas(sessionId, 'choose'); }
 
     let bodyNode;
     if (hostTaken) {
@@ -253,6 +277,7 @@ export function createCanvasSurface(React) {
         h('div', { className: 'icb-card' },
           h('div', { className: 'icb-card-title' }, t('initTitle')),
           h('div', { className: 'icb-card-desc' }, t('initDesc')),
+          h('div', { className: 'icb-card-desc' }, t('credentialHint')),
           status.cwd && h('div', { className: 'icb-card-code' }, status.cwd),
           h('div', { className: 'icb-field' },
             h('label', { className: 'icb-label' }, t('projectTitleLabel')),
@@ -282,6 +307,8 @@ export function createCanvasSurface(React) {
           ),
         ),
       );
+    } else if (isRunning && status?.binding?.choosing) {
+      bodyNode = h(ProjectPicker, { key: sessionId, sessionId, store, t, loading });
     } else if (status?.active && (!isRunning || !iframeUrl)) {
       const diagText = status.startError || error || status.backend?.message || t('serverNotRunning');
       const hintText = status.backend?.hint || '';
@@ -305,9 +332,12 @@ export function createCanvasSurface(React) {
           ),
         ),
       );
+    } else if (status?.legacy && iframeUrl) {
+      bodyNode = h(LegacyFrame, { key: sessionId + iframeNonce + status.instance.url, url: iframeUrl, backend: status.instance.url, title: t('tabTitle'), t });
     } else {
       bodyNode = h('iframe', {
         key: `${sessionId}:${iframeUrl}:${iframeNonce}`,
+        ref: frame => store.attachFrame(sessionId, frame),
         className: 'icb-iframe',
         src: iframeUrl,
         title: status?.project?.title || 'Infinite Canvas',
@@ -329,19 +359,21 @@ export function createCanvasSurface(React) {
           status?.active && isRunning && h('button', {
             type: 'button',
             className: 'icb-btn',
+            disabled: loading,
             onClick: openCanvasLibrary,
             title: t('library'),
           }, t('library')),
           status?.active && isRunning && h('button', {
             type: 'button',
             className: 'icb-btn',
+            disabled: loading,
             onClick: openNewCanvas,
             title: t('newCanvas'),
           }, t('newCanvas')),
           status?.active && isRunning && h('button', {
             type: 'button',
             className: 'icb-btn',
-            onClick: () => setIframeNonce((n) => n + 1),
+            onClick: () => void store.flushFrame(sessionId).then(() => setIframeNonce(n => n + 1)).catch(e => window.alert(e.message)),
             title: t('reload'),
           }, t('reload')),
           status?.active && isRunning && h('button', {
@@ -365,6 +397,8 @@ export function createCanvasSurface(React) {
           }, t('settings')),
         ),
       ),
+      status?.instance && !status.instance.capabilities?.sharedConfigDir && h('small', null, t('localCredentials')),
+      error && h('p', { role: 'alert' }, error),
       h('div', { className: 'icb-stage' }, bodyNode),
       settingsOpen && h(SettingsModal, {
         initialConfig: status?.config,
@@ -372,7 +406,8 @@ export function createCanvasSurface(React) {
         onClose: () => setSettingsOpen(false),
         onSave: async (next) => {
           await store.updateSettings(sessionId, next);
-          if (status?.active) {
+          const backendChanged = Object.keys(next).some(key => key !== 'newSessionCanvas' && next[key] !== status?.config?.[key]);
+          if (status?.active && backendChanged) {
             await store.restartInstance(sessionId).catch(() => {});
           }
         },

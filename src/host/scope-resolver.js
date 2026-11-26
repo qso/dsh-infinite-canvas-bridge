@@ -192,6 +192,7 @@ export async function initCanvasProjectInDir(targetDir, options = {}) {
         '.canvas.lock',
         '.canvas.url',
         'private/',
+        '.dsh-sessions/',
         '',
       ].join('\n'),
       'utf8',

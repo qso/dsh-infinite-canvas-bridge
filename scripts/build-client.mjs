@@ -36,7 +36,7 @@ async function build() {
     '  factory(require) {',
     "    const React = require('react');",
     '',
-    parts.join('\n').replace(/^/gm, '    '),
+    parts.join('\n').replace(/^(?=.)/gm, '    '),
     '    return createClientPlugin(React);',
     '  },',
     '});',

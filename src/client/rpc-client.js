@@ -25,7 +25,8 @@ export function createBridgeRpcClient() {
     restartInstance: (sessionId) => call('restartInstance', { sessionId }),
     stopInstance: (sessionId) => call('stopInstance', { sessionId }),
     updateSettings: (settings) => call('updateSettings', { settings }),
-    setActiveProject: (sessionId, projectId) => call('setActiveProject', { sessionId, projectId }),
+    selectCanvas: (sessionId, mode, projectId) => call('selectCanvas', { sessionId, mode, projectId }),
+    listProjects: (sessionId) => call('listProjects', { sessionId }),
     ackUiAction: (sessionId, seq) => call('ackUiAction', { sessionId, seq }),
   };
 }

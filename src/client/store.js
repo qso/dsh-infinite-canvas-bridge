@@ -4,7 +4,9 @@ export function createBridgeStore(ctx, rpc) {
   const statusBySession = new Map();
   const loadingBySession = new Map();
   const errorBySession = new Map();
-  const iframeOverrideBySession = new Map();
+  const frames = new Map();
+  const selecting = new Set();
+  const requestVersion = new Map();
   const hostOwnerBySession = new Map(); // sessionId -> 'pane' | 'main'
   let foregroundSessionId = null;
   let sidebarRightController = null;
@@ -127,41 +129,66 @@ export function createBridgeStore(ctx, rpc) {
   }
 
   function getIframeUrl(sessionId) {
-    const override = iframeOverrideBySession.get(sessionId);
-    if (override) return override;
     return statusBySession.get(sessionId)?.iframeUrl || null;
   }
 
-  function setIframeUrlOverride(sessionId, url) {
-    if (!url) iframeOverrideBySession.delete(sessionId);
-    else iframeOverrideBySession.set(sessionId, url);
-    emitSession(sessionId);
+  function attachFrame(id, frame) {
+    if (frame) frames.set(id, frame);
+    else frames.delete(id);
+  }
+
+  async function flushFrame(id) {
+    const status = statusBySession.get(id);
+    const frame = frames.get(id);
+    if (!frame?.contentWindow || !status?.clientConnected || !status.instance?.capabilities.projectEditors) return;
+    const channel = new MessageChannel();
+    try {
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Canvas save timed out.')), 5000);
+        channel.port1.onmessage = ({ data }) => {
+          clearTimeout(timeout);
+          if (data?.ok) resolve();
+          else reject(new Error(data?.error || 'Canvas save failed.'));
+        };
+        frame.contentWindow.postMessage({ type: 'dsh-canvas-flush', projectId: status.binding.projectId },
+          new URL(frame.src).origin, [channel.port2]);
+      });
+    } finally { channel.port1.close(); }
+  }
+
+  async function selectCanvas(id, mode, projectId) {
+    if (selecting.has(id)) return;
+    selecting.add(id);
+    const version = (requestVersion.get(id) || 0) + 1;
+    requestVersion.set(id, version);
+    loadingBySession.set(id, true);
+    emitSession(id);
+    try {
+      await flushFrame(id);
+      const status = await rpc.selectCanvas(id, mode, projectId);
+      if (requestVersion.get(id) === version) {
+        statusBySession.set(id, status);
+        errorBySession.delete(id);
+      }
+    } catch (error) {
+      errorBySession.set(id, error.message);
+    } finally {
+      selecting.delete(id);
+      loadingBySession.set(id, false);
+      emitSession(id);
+    }
   }
 
   async function handleOpenIntent(sessionId, status) {
     const intent = status?.binding?.openIntent;
     if (!intent || !intent.seq) return;
-    try {
-      await rpc.ackUiAction(sessionId, intent.seq);
-    } catch {
-      // Ignore ack failure
-    }
-    if (status?.iframeUrl) {
-      const targetUrl = new URL(status.iframeUrl);
-      if (intent.mode === 'new' && !intent.projectId) {
-        targetUrl.pathname = '/canvas';
-        targetUrl.searchParams.set('mode', 'new');
-      } else if (intent.projectId) {
-        targetUrl.pathname = `/canvas/${encodeURIComponent(intent.projectId)}`;
-        targetUrl.searchParams.delete('mode');
-      }
-      setIframeUrlOverride(sessionId, targetUrl.toString());
-    }
-    openRightPaneCanvas();
+    if (openRightPaneCanvas()) await rpc.ackUiAction(sessionId, intent.seq);
   }
 
   async function refreshStatus(sessionId, options = {}) {
-    if (!sessionId || disposed) return null;
+    if (!sessionId || disposed || selecting.has(sessionId)) return null;
+    const version = (requestVersion.get(sessionId) || 0) + 1;
+    requestVersion.set(sessionId, version);
     if (options.foreground) setForegroundSessionId(sessionId);
     if (options.showLoading) {
       loadingBySession.set(sessionId, true);
@@ -169,7 +196,10 @@ export function createBridgeStore(ctx, rpc) {
     }
     try {
       const status = await rpc.getStatus(sessionId, Boolean(options.autoStart));
-      if (disposed) return null;
+      if (disposed || requestVersion.get(sessionId) !== version) return null;
+      const previous = statusBySession.get(sessionId);
+      if (previous?.iframeUrl && status.instance && status.iframeUrl !== previous.iframeUrl) await flushFrame(sessionId);
+      if (disposed || requestVersion.get(sessionId) !== version) return null;
       statusBySession.set(sessionId, status);
       errorBySession.delete(sessionId);
       emitSession(sessionId);
@@ -196,7 +226,6 @@ export function createBridgeStore(ctx, rpc) {
       const res = await rpc.initProject(sessionId, options);
       if (res?.status) {
         statusBySession.set(sessionId, res.status);
-        setIframeUrlOverride(sessionId, null);
       }
       emitSession(sessionId);
       return res;
@@ -234,9 +263,9 @@ export function createBridgeStore(ctx, rpc) {
     errorBySession.delete(sessionId);
     emitSession(sessionId);
     try {
+      await flushFrame(sessionId);
       const status = await rpc.restartInstance(sessionId);
       statusBySession.set(sessionId, status);
-      setIframeUrlOverride(sessionId, null);
       emitSession(sessionId);
       return status;
     } catch (err) {
@@ -253,9 +282,9 @@ export function createBridgeStore(ctx, rpc) {
     loadingBySession.set(sessionId, true);
     emitSession(sessionId);
     try {
+      await flushFrame(sessionId);
       const status = await rpc.stopInstance(sessionId);
       statusBySession.set(sessionId, status);
-      setIframeUrlOverride(sessionId, null);
       emitSession(sessionId);
       return status;
     } catch (err) {
@@ -290,6 +319,8 @@ export function createBridgeStore(ctx, rpc) {
   return {
     attachSidebarRight,
     attachLayout,
+    attachFrame,
+    flushFrame,
     openRightPaneCanvas,
     getForegroundSessionId: () => readForegroundSessionId(),
     setForegroundSessionId,
@@ -300,7 +331,8 @@ export function createBridgeStore(ctx, rpc) {
     releaseHost,
     getHostOwner,
     getIframeUrl,
-    setIframeUrlOverride,
+    selectCanvas,
+    listProjects: rpc.listProjects,
     refreshStatus,
     initProject,
     ensureStarted,

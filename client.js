@@ -10,21 +10,21 @@ window.__ModuleLoader__.load({
     const PANEL_ID = 'infinite-canvas-bridge';
     const TAB_KIND = 'infinite-canvas-bridge';
     const RPC_PATH = '/api/infinite-canvas-bridge';
-    
+
     const PROJECT_MARKER_FILE = '.infinite-canvas.json';
     const PROJECT_SCHEMA_V1 = 'dsh.infinite-canvas.project.v1';
     const DEFAULT_DATA_DIR_NAME = '.infinite-canvas';
-    
+
     const DEFAULT_NPX_PACKAGE = '@basketikun/infinite-canvas@latest';
     const DEFAULT_PORT_RANGE_START = 17380;
     const DEFAULT_PORT_RANGE_END = 17440;
     const DEFAULT_STARTUP_TIMEOUT_MS = 25000;
     const DEFAULT_TOOL_TIMEOUT_MS = 35000;
     const EXPECTED_PROTOCOL_VERSION = 12;
-    
+
     const BACKEND_MODES = ['auto', 'npx', 'local-repo', 'external'];
     const REPO_RUN_MODES = ['built', 'dev'];
-    
+
     // --- src/client/styles.js ---
     const BRIDGE_CSS = `
     .icb-root {
@@ -39,7 +39,7 @@ window.__ModuleLoader__.load({
       font-size: 13px;
       position: relative;
     }
-    
+
     .icb-toolbar {
       display: flex;
       align-items: center;
@@ -51,7 +51,7 @@ window.__ModuleLoader__.load({
       flex-shrink: 0;
       min-height: 36px;
     }
-    
+
     .icb-toolbar-left,
     .icb-toolbar-right {
       display: flex;
@@ -59,7 +59,7 @@ window.__ModuleLoader__.load({
       gap: 6px;
       min-width: 0;
     }
-    
+
     .icb-dot {
       width: 7px;
       height: 7px;
@@ -67,20 +67,20 @@ window.__ModuleLoader__.load({
       flex-shrink: 0;
       background: var(--dsw-alias-label-tertiary);
     }
-    
+
     .icb-dot.ok {
       background: var(--dsw-alias-state-success-primary, #16a34a);
       box-shadow: 0 0 0 2px var(--dsw-alias-state-success-tertiary, rgba(22, 163, 74, 0.18));
     }
-    
+
     .icb-dot.warn {
       background: var(--dsw-alias-state-warn-primary, #d97706);
     }
-    
+
     .icb-dot.err {
       background: var(--dsw-alias-state-error-primary, #dc2626);
     }
-    
+
     .icb-title {
       font-weight: 600;
       color: var(--dsw-alias-label-primary);
@@ -89,7 +89,7 @@ window.__ModuleLoader__.load({
       text-overflow: ellipsis;
       max-width: 220px;
     }
-    
+
     .icb-badge {
       font-size: 11px;
       padding: 1px 7px;
@@ -99,7 +99,7 @@ window.__ModuleLoader__.load({
       color: var(--dsw-alias-label-secondary);
       white-space: nowrap;
     }
-    
+
     .icb-btn {
       display: inline-flex;
       align-items: center;
@@ -117,38 +117,38 @@ window.__ModuleLoader__.load({
       white-space: nowrap;
       transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
     }
-    
+
     .icb-btn:hover:not(:disabled) {
       background: var(--dsw-alias-interactive-bg-hover);
       color: var(--dsw-alias-label-primary);
     }
-    
+
     .icb-btn:disabled {
       opacity: 0.48;
       cursor: not-allowed;
     }
-    
+
     .icb-btn.primary {
       background: var(--dsw-alias-button-primary-fill, var(--dsw-alias-brand-primary, #2563eb));
       color: var(--dsw-alias-label-on-color, #ffffff);
     }
-    
+
     .icb-btn.primary:hover:not(:disabled) {
       background: var(--dsw-alias-button-primary-hover, var(--dsw-alias-brand-primary, #1d4ed8));
       color: var(--dsw-alias-label-on-color, #ffffff);
     }
-    
+
     .icb-btn.outline {
       border-color: var(--dsw-alias-border-l3, var(--dsw-alias-border-l2));
       background: var(--dsw-alias-button-elevated-fill, transparent);
       color: var(--dsw-alias-label-primary);
     }
-    
+
     .icb-btn.outline:hover:not(:disabled) {
       background: var(--dsw-alias-interactive-bg-hover);
       color: var(--dsw-alias-label-primary);
     }
-    
+
     .icb-stage {
       flex: 1;
       min-height: 0;
@@ -156,7 +156,7 @@ window.__ModuleLoader__.load({
       display: flex;
       flex-direction: column;
     }
-    
+
     .icb-iframe {
       width: 100%;
       height: 100%;
@@ -164,7 +164,7 @@ window.__ModuleLoader__.load({
       flex: 1;
       background: transparent;
     }
-    
+
     .icb-center {
       flex: 1;
       display: flex;
@@ -173,7 +173,7 @@ window.__ModuleLoader__.load({
       padding: 24px;
       overflow: auto;
     }
-    
+
     .icb-card {
       width: 100%;
       max-width: 480px;
@@ -185,19 +185,19 @@ window.__ModuleLoader__.load({
       flex-direction: column;
       gap: 12px;
     }
-    
+
     .icb-card-title {
       font-size: 15px;
       font-weight: 600;
       color: var(--dsw-alias-label-primary);
     }
-    
+
     .icb-card-desc {
       font-size: 12.5px;
       line-height: 1.55;
       color: var(--dsw-alias-label-secondary);
     }
-    
+
     .icb-card-code {
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
       font-size: 11.5px;
@@ -211,14 +211,14 @@ window.__ModuleLoader__.load({
       white-space: pre-wrap;
       word-break: break-all;
     }
-    
+
     .icb-card-actions {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
       margin-top: 4px;
     }
-    
+
     .icb-settings-overlay {
       position: absolute;
       inset: 0;
@@ -229,7 +229,7 @@ window.__ModuleLoader__.load({
       justify-content: center;
       padding: 16px;
     }
-    
+
     .icb-settings-modal {
       width: 100%;
       max-width: 460px;
@@ -245,19 +245,19 @@ window.__ModuleLoader__.load({
       gap: 12px;
       box-shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
     }
-    
+
     .icb-field {
       display: flex;
       flex-direction: column;
       gap: 5px;
     }
-    
+
     .icb-label {
       font-size: 12px;
       font-weight: 500;
       color: var(--dsw-alias-label-secondary);
     }
-    
+
     .icb-input,
     .icb-select {
       width: 100%;
@@ -270,7 +270,7 @@ window.__ModuleLoader__.load({
       color: var(--dsw-alias-label-primary);
       font-size: 12.5px;
     }
-    
+
     .icb-checkbox-row {
       display: flex;
       align-items: center;
@@ -279,7 +279,7 @@ window.__ModuleLoader__.load({
       color: var(--dsw-alias-label-primary);
       cursor: pointer;
     }
-    
+
     .icb-chip {
       display: inline-flex;
       align-items: center;
@@ -299,18 +299,18 @@ window.__ModuleLoader__.load({
       max-width: 220px;
       transition: background 120ms ease, border-color 120ms ease;
     }
-    
+
     .icb-chip:hover {
       background: var(--dsw-alias-interactive-bg-hover);
     }
-    
+
     .icb-chip-label {
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    
+
     .icb-pane-tab-title {
       display: inline-flex;
       align-items: center;
@@ -319,7 +319,7 @@ window.__ModuleLoader__.load({
       white-space: nowrap;
     }
     `;
-    
+
     // --- src/client/rpc-client.js ---
     function createBridgeRpcClient() {
       async function call(action, payload = {}) {
@@ -338,7 +338,7 @@ window.__ModuleLoader__.load({
         }
         return data.value;
       }
-    
+
       return {
         getStatus: (sessionId, autoStart = false) => call('getStatus', { sessionId, autoStart }),
         initProject: (sessionId, options = {}) => call('initProject', { sessionId, ...options }),
@@ -346,11 +346,12 @@ window.__ModuleLoader__.load({
         restartInstance: (sessionId) => call('restartInstance', { sessionId }),
         stopInstance: (sessionId) => call('stopInstance', { sessionId }),
         updateSettings: (settings) => call('updateSettings', { settings }),
-        setActiveProject: (sessionId, projectId) => call('setActiveProject', { sessionId, projectId }),
+        selectCanvas: (sessionId, mode, projectId) => call('selectCanvas', { sessionId, mode, projectId }),
+        listProjects: (sessionId) => call('listProjects', { sessionId }),
         ackUiAction: (sessionId, seq) => call('ackUiAction', { sessionId, seq }),
       };
     }
-    
+
     // --- src/client/store.js ---
     function createBridgeStore(ctx, rpc) {
       const globalListeners = new Set();
@@ -358,22 +359,24 @@ window.__ModuleLoader__.load({
       const statusBySession = new Map();
       const loadingBySession = new Map();
       const errorBySession = new Map();
-      const iframeOverrideBySession = new Map();
+      const frames = new Map();
+      const selecting = new Set();
+      const requestVersion = new Map();
       const hostOwnerBySession = new Map(); // sessionId -> 'pane' | 'main'
       let foregroundSessionId = null;
       let sidebarRightController = null;
       let layoutController = null;
       let pollTimer = null;
       let disposed = false;
-    
+
       function attachSidebarRight(controller) {
         sidebarRightController = controller || null;
       }
-    
+
       function attachLayout(controller) {
         layoutController = controller || null;
       }
-    
+
       function openRightPaneCanvas() {
         try {
           if (sidebarRightController && typeof sidebarRightController.openTab === 'function') {
@@ -393,13 +396,13 @@ window.__ModuleLoader__.load({
         }
         return false;
       }
-    
+
       function emitGlobal() {
         for (const fn of globalListeners) {
           try { fn(); } catch { /* ignore */ }
         }
       }
-    
+
       function emitSession(sessionId) {
         const set = sessionListeners.get(sessionId);
         if (set) {
@@ -409,7 +412,7 @@ window.__ModuleLoader__.load({
         }
         emitGlobal();
       }
-    
+
       function readForegroundSessionId() {
         try {
           const s = ctx.sessions;
@@ -443,31 +446,31 @@ window.__ModuleLoader__.load({
         }
         return foregroundSessionId;
       }
-    
+
       function setForegroundSessionId(sessionId) {
         if (!sessionId || sessionId === foregroundSessionId) return;
         foregroundSessionId = sessionId;
         emitGlobal();
       }
-    
+
       function getStatusSnapshot(sessionId) {
         return statusBySession.get(sessionId) || null;
       }
-    
+
       function isLoading(sessionId) {
         return Boolean(loadingBySession.get(sessionId));
       }
-    
+
       function getError(sessionId) {
         return errorBySession.get(sessionId) || null;
       }
-    
+
       function claimHost(sessionId, host) {
         if (!sessionId) return;
         hostOwnerBySession.set(sessionId, host);
         emitSession(sessionId);
       }
-    
+
       function releaseHost(sessionId, host) {
         if (!sessionId) return;
         if (hostOwnerBySession.get(sessionId) === host) {
@@ -475,47 +478,72 @@ window.__ModuleLoader__.load({
           emitSession(sessionId);
         }
       }
-    
+
       function getHostOwner(sessionId) {
         return hostOwnerBySession.get(sessionId) || null;
       }
-    
+
       function getIframeUrl(sessionId) {
-        const override = iframeOverrideBySession.get(sessionId);
-        if (override) return override;
         return statusBySession.get(sessionId)?.iframeUrl || null;
       }
-    
-      function setIframeUrlOverride(sessionId, url) {
-        if (!url) iframeOverrideBySession.delete(sessionId);
-        else iframeOverrideBySession.set(sessionId, url);
-        emitSession(sessionId);
+
+      function attachFrame(id, frame) {
+        if (frame) frames.set(id, frame);
+        else frames.delete(id);
       }
-    
+
+      async function flushFrame(id) {
+        const status = statusBySession.get(id);
+        const frame = frames.get(id);
+        if (!frame?.contentWindow || !status?.clientConnected || !status.instance?.capabilities.projectEditors) return;
+        const channel = new MessageChannel();
+        try {
+          await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => reject(new Error('Canvas save timed out.')), 5000);
+            channel.port1.onmessage = ({ data }) => {
+              clearTimeout(timeout);
+              if (data?.ok) resolve();
+              else reject(new Error(data?.error || 'Canvas save failed.'));
+            };
+            frame.contentWindow.postMessage({ type: 'dsh-canvas-flush', projectId: status.binding.projectId },
+              new URL(frame.src).origin, [channel.port2]);
+          });
+        } finally { channel.port1.close(); }
+      }
+
+      async function selectCanvas(id, mode, projectId) {
+        if (selecting.has(id)) return;
+        selecting.add(id);
+        const version = (requestVersion.get(id) || 0) + 1;
+        requestVersion.set(id, version);
+        loadingBySession.set(id, true);
+        emitSession(id);
+        try {
+          await flushFrame(id);
+          const status = await rpc.selectCanvas(id, mode, projectId);
+          if (requestVersion.get(id) === version) {
+            statusBySession.set(id, status);
+            errorBySession.delete(id);
+          }
+        } catch (error) {
+          errorBySession.set(id, error.message);
+        } finally {
+          selecting.delete(id);
+          loadingBySession.set(id, false);
+          emitSession(id);
+        }
+      }
+
       async function handleOpenIntent(sessionId, status) {
         const intent = status?.binding?.openIntent;
         if (!intent || !intent.seq) return;
-        try {
-          await rpc.ackUiAction(sessionId, intent.seq);
-        } catch {
-          // Ignore ack failure
-        }
-        if (status?.iframeUrl) {
-          const targetUrl = new URL(status.iframeUrl);
-          if (intent.mode === 'new' && !intent.projectId) {
-            targetUrl.pathname = '/canvas';
-            targetUrl.searchParams.set('mode', 'new');
-          } else if (intent.projectId) {
-            targetUrl.pathname = `/canvas/${encodeURIComponent(intent.projectId)}`;
-            targetUrl.searchParams.delete('mode');
-          }
-          setIframeUrlOverride(sessionId, targetUrl.toString());
-        }
-        openRightPaneCanvas();
+        if (openRightPaneCanvas()) await rpc.ackUiAction(sessionId, intent.seq);
       }
-    
+
       async function refreshStatus(sessionId, options = {}) {
-        if (!sessionId || disposed) return null;
+        if (!sessionId || disposed || selecting.has(sessionId)) return null;
+        const version = (requestVersion.get(sessionId) || 0) + 1;
+        requestVersion.set(sessionId, version);
         if (options.foreground) setForegroundSessionId(sessionId);
         if (options.showLoading) {
           loadingBySession.set(sessionId, true);
@@ -523,7 +551,10 @@ window.__ModuleLoader__.load({
         }
         try {
           const status = await rpc.getStatus(sessionId, Boolean(options.autoStart));
-          if (disposed) return null;
+          if (disposed || requestVersion.get(sessionId) !== version) return null;
+          const previous = statusBySession.get(sessionId);
+          if (previous?.iframeUrl && status.instance && status.iframeUrl !== previous.iframeUrl) await flushFrame(sessionId);
+          if (disposed || requestVersion.get(sessionId) !== version) return null;
           statusBySession.set(sessionId, status);
           errorBySession.delete(sessionId);
           emitSession(sessionId);
@@ -541,7 +572,7 @@ window.__ModuleLoader__.load({
           }
         }
       }
-    
+
       async function initProject(sessionId, options = {}) {
         loadingBySession.set(sessionId, true);
         errorBySession.delete(sessionId);
@@ -550,7 +581,6 @@ window.__ModuleLoader__.load({
           const res = await rpc.initProject(sessionId, options);
           if (res?.status) {
             statusBySession.set(sessionId, res.status);
-            setIframeUrlOverride(sessionId, null);
           }
           emitSession(sessionId);
           return res;
@@ -563,7 +593,7 @@ window.__ModuleLoader__.load({
           emitSession(sessionId);
         }
       }
-    
+
       async function ensureStarted(sessionId) {
         loadingBySession.set(sessionId, true);
         errorBySession.delete(sessionId);
@@ -582,15 +612,15 @@ window.__ModuleLoader__.load({
           emitSession(sessionId);
         }
       }
-    
+
       async function restartInstance(sessionId) {
         loadingBySession.set(sessionId, true);
         errorBySession.delete(sessionId);
         emitSession(sessionId);
         try {
+          await flushFrame(sessionId);
           const status = await rpc.restartInstance(sessionId);
           statusBySession.set(sessionId, status);
-          setIframeUrlOverride(sessionId, null);
           emitSession(sessionId);
           return status;
         } catch (err) {
@@ -602,14 +632,14 @@ window.__ModuleLoader__.load({
           emitSession(sessionId);
         }
       }
-    
+
       async function stopInstance(sessionId) {
         loadingBySession.set(sessionId, true);
         emitSession(sessionId);
         try {
+          await flushFrame(sessionId);
           const status = await rpc.stopInstance(sessionId);
           statusBySession.set(sessionId, status);
-          setIframeUrlOverride(sessionId, null);
           emitSession(sessionId);
           return status;
         } catch (err) {
@@ -621,7 +651,7 @@ window.__ModuleLoader__.load({
           emitSession(sessionId);
         }
       }
-    
+
       async function updateSettings(sessionId, settings) {
         const res = await rpc.updateSettings(settings);
         if (sessionId) {
@@ -629,7 +659,7 @@ window.__ModuleLoader__.load({
         }
         return res;
       }
-    
+
       // Background lightweight poll for foreground session to catch agent `canvas_open` intents & connection status
       pollTimer = setInterval(() => {
         if (disposed) return;
@@ -640,10 +670,12 @@ window.__ModuleLoader__.load({
           void refreshStatus(sid, { autoStart: false });
         }
       }, 2200);
-    
+
       return {
         attachSidebarRight,
         attachLayout,
+        attachFrame,
+        flushFrame,
         openRightPaneCanvas,
         getForegroundSessionId: () => readForegroundSessionId(),
         setForegroundSessionId,
@@ -654,7 +686,8 @@ window.__ModuleLoader__.load({
         releaseHost,
         getHostOwner,
         getIframeUrl,
-        setIframeUrlOverride,
+        selectCanvas,
+        listProjects: rpc.listProjects,
         refreshStatus,
         initProject,
         ensureStarted,
@@ -687,13 +720,14 @@ window.__ModuleLoader__.load({
         },
       };
     }
-    
+
     // --- src/client/components/CanvasSurface.js ---
     function createCanvasSurface(React) {
       const h = React.createElement;
       const { useEffect, useState } = React;
-    
+
       function SettingsModal({ initialConfig, t, onClose, onSave }) {
+        const [newSessionCanvas, setNewSessionCanvas] = useState(initialConfig?.newSessionCanvas || 'blank');
         const [backendMode, setBackendMode] = useState(initialConfig?.backendMode || 'auto');
         const [repoPath, setRepoPath] = useState(initialConfig?.repoPath || '');
         const [repoRunMode, setRepoRunMode] = useState(initialConfig?.repoRunMode || 'built');
@@ -703,12 +737,13 @@ window.__ModuleLoader__.load({
         const [useSharedConfigDir, setUseSharedConfigDir] = useState(initialConfig?.useSharedConfigDir !== false);
         const [saving, setSaving] = useState(false);
         const [err, setErr] = useState('');
-    
+
         async function handleSave() {
           setSaving(true);
           setErr('');
           try {
             await onSave({
+              newSessionCanvas,
               backendMode,
               repoPath: repoPath.trim(),
               repoRunMode,
@@ -724,7 +759,7 @@ window.__ModuleLoader__.load({
             setSaving(false);
           }
         }
-    
+
         return h('div', {
           className: 'icb-settings-overlay',
           onClick: (e) => { if (e.target === e.currentTarget) onClose(); },
@@ -732,7 +767,10 @@ window.__ModuleLoader__.load({
           h('div', { className: 'icb-settings-modal', role: 'dialog', 'aria-modal': 'true' },
             h('div', { className: 'icb-card-title' }, t('settingsTitle')),
             h('div', { className: 'icb-card-desc' }, t('settingsHint')),
-    
+
+            h('label', { className: 'icb-field' }, t('newSessionDefault'),
+              h('select', { className: 'icb-select', value: newSessionCanvas, onChange: e => setNewSessionCanvas(e.target.value) },
+                ['blank', 'open', 'choose'].map(value => h('option', { key: value, value }, t('default_' + value))))),
             h('div', { className: 'icb-field' },
               h('label', { className: 'icb-label' }, t('backendMode')),
               h('select', {
@@ -746,7 +784,7 @@ window.__ModuleLoader__.load({
                 h('option', { value: 'external' }, t('modeExternal')),
               ),
             ),
-    
+
             (backendMode === 'auto' || backendMode === 'local-repo') && h('div', { className: 'icb-field' },
               h('label', { className: 'icb-label' }, t('repoPath')),
               h('input', {
@@ -756,7 +794,7 @@ window.__ModuleLoader__.load({
                 onChange: (e) => setRepoPath(e.target.value),
               }),
             ),
-    
+
             (backendMode === 'auto' || backendMode === 'local-repo') && h('div', { className: 'icb-field' },
               h('label', { className: 'icb-label' }, t('repoRunMode')),
               h('select', {
@@ -768,7 +806,7 @@ window.__ModuleLoader__.load({
                 h('option', { value: 'dev' }, t('runModeDev')),
               ),
             ),
-    
+
             backendMode === 'npx' && h('div', { className: 'icb-field' },
               h('label', { className: 'icb-label' }, t('npxPackage')),
               h('input', {
@@ -777,7 +815,7 @@ window.__ModuleLoader__.load({
                 onChange: (e) => setNpxPackage(e.target.value),
               }),
             ),
-    
+
             (backendMode === 'auto' || backendMode === 'external') && h('div', { className: 'icb-field' },
               h('label', { className: 'icb-label' }, t('externalUrl')),
               h('input', {
@@ -787,7 +825,7 @@ window.__ModuleLoader__.load({
                 onChange: (e) => setExternalUrl(e.target.value),
               }),
             ),
-    
+
             h('label', { className: 'icb-checkbox-row' },
               h('input', {
                 type: 'checkbox',
@@ -796,7 +834,7 @@ window.__ModuleLoader__.load({
               }),
               h('span', null, t('useSharedConfigDir')),
             ),
-    
+
             useSharedConfigDir && h('div', { className: 'icb-field' },
               h('label', { className: 'icb-label' }, t('sharedConfigDir')),
               h('input', {
@@ -806,9 +844,9 @@ window.__ModuleLoader__.load({
                 onChange: (e) => setSharedConfigDir(e.target.value),
               }),
             ),
-    
+
             err && h('div', { className: 'icb-card-code' }, err),
-    
+
             h('div', { className: 'icb-card-actions', style: { justifyContent: 'flex-end' } },
               h('button', { type: 'button', className: 'icb-btn outline', onClick: onClose }, t('cancel')),
               h('button', { type: 'button', className: 'icb-btn primary', disabled: saving, onClick: handleSave },
@@ -818,20 +856,55 @@ window.__ModuleLoader__.load({
           ),
         );
       }
-    
+
+      function ProjectPicker({ sessionId, store, t, loading }) {
+        const [rows, setRows] = useState(null);
+        const [error, setError] = useState('');
+        useEffect(() => {
+          let active = true;
+          store.listProjects(sessionId).then(value => { if (active) setRows(value); },
+            cause => { if (active) setError(cause.message); });
+          return () => { active = false; };
+        }, [sessionId, store]);
+        return h('div', { className: 'icb-center' }, h('div', { className: 'icb-card' },
+          h('div', { className: 'icb-card-title' }, t('selectCanvas')),
+          error && h('p', { role: 'alert' }, error),
+          rows === null && !error && h('p', null, t('loadingTitle')),
+          (rows || []).map(row => h('button', { key: row.id, type: 'button', className: 'icb-btn', disabled: loading,
+            onClick: () => void store.selectCanvas(sessionId, 'resume', row.id) }, row.open ? row.title + ' · ' + t('alreadyOpen') : row.title)),
+          h('button', { className: 'icb-btn primary', disabled: loading, onClick: () => void store.selectCanvas(sessionId, 'new') }, t('newCanvas'))));
+      }
+
+      function LegacyFrame({ url, backend, title, t }) {
+        const [held, setHeld] = useState(false);
+        const origin = new URL(backend).origin;
+        useEffect(() => {
+          const controller = new AbortController();
+          let release;
+          setHeld(false);
+          navigator.locks?.request('infinite-canvas:' + origin, { signal: controller.signal }, async () => {
+            if (controller.signal.aborted) return;
+            setHeld(true);
+            await new Promise(resolve => { release = resolve; });
+          }).catch(() => {});
+          return () => { controller.abort(); release?.(); };
+        }, [origin]);
+        return held ? h('iframe', { className: 'icb-iframe', src: url, title }) : h('p', { role: 'status' }, t('legacyBusy'));
+      }
+
       return function CanvasSurface({ host, sessionId: explicitSessionId, store, t }) {
         const [, setTick] = useState(0);
         const [settingsOpen, setSettingsOpen] = useState(false);
         const [iframeNonce, setIframeNonce] = useState(0);
         const [titleDraft, setTitleDraft] = useState('');
-    
+
         const sessionId = explicitSessionId || store.getForegroundSessionId();
         const status = sessionId ? store.getStatusSnapshot(sessionId) : null;
         const loading = sessionId ? store.isLoading(sessionId) : false;
         const error = sessionId ? store.getError(sessionId) : null;
         const owner = sessionId ? store.getHostOwner(sessionId) : null;
         const iframeUrl = sessionId ? store.getIframeUrl(sessionId) : null;
-    
+
         useEffect(() => {
           const bump = () => setTick((v) => v + 1);
           const unsubGlobal = store.subscribeGlobal(bump);
@@ -841,7 +914,7 @@ window.__ModuleLoader__.load({
             unsubSession();
           };
         }, [sessionId]);
-    
+
         useEffect(() => {
           if (!sessionId) return undefined;
           store.claimHost(sessionId, host);
@@ -850,7 +923,7 @@ window.__ModuleLoader__.load({
             store.releaseHost(sessionId, host);
           };
         }, [sessionId, host]);
-    
+
         if (!sessionId) {
           return h('div', { className: 'icb-root' },
             h('div', { className: 'icb-center' },
@@ -861,7 +934,7 @@ window.__ModuleLoader__.load({
             ),
           );
         }
-    
+
         const hostTaken = owner && owner !== host;
         const isRunning = Boolean(status?.instance?.url);
         const isConnected = Boolean(status?.clientConnected);
@@ -872,15 +945,15 @@ window.__ModuleLoader__.load({
             : isRunning
               ? 'icb-dot warn'
               : 'icb-dot err';
-    
+
         const statusLabel = !status?.active
           ? t('statusInactive')
           : isConnected
             ? t('statusConnected')
-            : isRunning
+            : status?.readOnly ? t('statusReadOnly') : isRunning
               ? t('statusConnecting')
               : t('statusStopped');
-    
+
         async function handleInitFolder() {
           try {
             await store.initProject(sessionId, {
@@ -891,32 +964,16 @@ window.__ModuleLoader__.load({
             // Error captured in store
           }
         }
-    
+
         function openExternalWindow() {
           if (status?.instance?.url) {
             window.open(status.instance.url, '_blank', 'noopener,noreferrer');
           }
         }
-    
-        function openNewCanvas() {
-          if (!status?.instance?.url || !status?.binding?.clientId) return;
-          const u = new URL('/canvas', status.instance.url);
-          u.searchParams.set('mode', 'new');
-          u.searchParams.set('embed', 'dsh');
-          u.searchParams.set('dshClientId', status.binding.clientId);
-          store.setIframeUrlOverride(sessionId, u.toString());
-          setIframeNonce((n) => n + 1);
-        }
-    
-        function openCanvasLibrary() {
-          if (!status?.instance?.url || !status?.binding?.clientId) return;
-          const u = new URL('/canvas', status.instance.url);
-          u.searchParams.set('embed', 'dsh');
-          u.searchParams.set('dshClientId', status.binding.clientId);
-          store.setIframeUrlOverride(sessionId, u.toString());
-          setIframeNonce((n) => n + 1);
-        }
-    
+
+        function openNewCanvas() { void store.selectCanvas(sessionId, 'new'); }
+        function openCanvasLibrary() { void store.selectCanvas(sessionId, 'choose'); }
+
         let bodyNode;
         if (hostTaken) {
           bodyNode = h('div', { className: 'icb-center' },
@@ -944,6 +1001,7 @@ window.__ModuleLoader__.load({
             h('div', { className: 'icb-card' },
               h('div', { className: 'icb-card-title' }, t('initTitle')),
               h('div', { className: 'icb-card-desc' }, t('initDesc')),
+              h('div', { className: 'icb-card-desc' }, t('credentialHint')),
               status.cwd && h('div', { className: 'icb-card-code' }, status.cwd),
               h('div', { className: 'icb-field' },
                 h('label', { className: 'icb-label' }, t('projectTitleLabel')),
@@ -973,6 +1031,8 @@ window.__ModuleLoader__.load({
               ),
             ),
           );
+        } else if (isRunning && status?.binding?.choosing) {
+          bodyNode = h(ProjectPicker, { key: sessionId, sessionId, store, t, loading });
         } else if (status?.active && (!isRunning || !iframeUrl)) {
           const diagText = status.startError || error || status.backend?.message || t('serverNotRunning');
           const hintText = status.backend?.hint || '';
@@ -996,16 +1056,19 @@ window.__ModuleLoader__.load({
               ),
             ),
           );
+        } else if (status?.legacy && iframeUrl) {
+          bodyNode = h(LegacyFrame, { key: sessionId + iframeNonce + status.instance.url, url: iframeUrl, backend: status.instance.url, title: t('tabTitle'), t });
         } else {
           bodyNode = h('iframe', {
             key: `${sessionId}:${iframeUrl}:${iframeNonce}`,
+            ref: frame => store.attachFrame(sessionId, frame),
             className: 'icb-iframe',
             src: iframeUrl,
             title: status?.project?.title || 'Infinite Canvas',
             allow: 'clipboard-read; clipboard-write',
           });
         }
-    
+
         return h('div', { className: 'icb-root' },
           h('div', { className: 'icb-toolbar' },
             h('div', { className: 'icb-toolbar-left' },
@@ -1020,19 +1083,21 @@ window.__ModuleLoader__.load({
               status?.active && isRunning && h('button', {
                 type: 'button',
                 className: 'icb-btn',
+                disabled: loading,
                 onClick: openCanvasLibrary,
                 title: t('library'),
               }, t('library')),
               status?.active && isRunning && h('button', {
                 type: 'button',
                 className: 'icb-btn',
+                disabled: loading,
                 onClick: openNewCanvas,
                 title: t('newCanvas'),
               }, t('newCanvas')),
               status?.active && isRunning && h('button', {
                 type: 'button',
                 className: 'icb-btn',
-                onClick: () => setIframeNonce((n) => n + 1),
+                onClick: () => void store.flushFrame(sessionId).then(() => setIframeNonce(n => n + 1)).catch(e => window.alert(e.message)),
                 title: t('reload'),
               }, t('reload')),
               status?.active && isRunning && h('button', {
@@ -1056,6 +1121,8 @@ window.__ModuleLoader__.load({
               }, t('settings')),
             ),
           ),
+          status?.instance && !status.instance.capabilities?.sharedConfigDir && h('small', null, t('localCredentials')),
+          error && h('p', { role: 'alert' }, error),
           h('div', { className: 'icb-stage' }, bodyNode),
           settingsOpen && h(SettingsModal, {
             initialConfig: status?.config,
@@ -1063,7 +1130,8 @@ window.__ModuleLoader__.load({
             onClose: () => setSettingsOpen(false),
             onSave: async (next) => {
               await store.updateSettings(sessionId, next);
-              if (status?.active) {
+              const backendChanged = Object.keys(next).some(key => key !== 'newSessionCanvas' && next[key] !== status?.config?.[key]);
+              if (status?.active && backendChanged) {
                 await store.restartInstance(sessionId).catch(() => {});
               }
             },
@@ -1071,17 +1139,17 @@ window.__ModuleLoader__.load({
         );
       };
     }
-    
+
     // --- src/client/components/SessionChip.js ---
     function createSessionChip(React) {
       const h = React.createElement;
       const { useEffect, useState } = React;
-    
+
       return function SessionChip({ sessionId, store, t }) {
         const [, setTick] = useState(0);
         const status = sessionId ? store.getStatusSnapshot(sessionId) : null;
         const loading = sessionId ? store.isLoading(sessionId) : false;
-    
+
         useEffect(() => {
           if (!sessionId) return undefined;
           store.setForegroundSessionId(sessionId);
@@ -1090,13 +1158,13 @@ window.__ModuleLoader__.load({
           void store.refreshStatus(sessionId, { autoStart: false, foreground: true });
           return unsub;
         }, [sessionId]);
-    
+
         if (!sessionId) return null;
-    
+
         const active = Boolean(status?.active);
         const connected = Boolean(status?.clientConnected);
         const running = Boolean(status?.instance?.url);
-    
+
         async function handleClick() {
           if (!active) {
             store.openRightPaneCanvas();
@@ -1107,7 +1175,7 @@ window.__ModuleLoader__.load({
           }
           store.openRightPaneCanvas();
         }
-    
+
         const dotClass = !active
           ? 'icb-dot'
           : connected
@@ -1115,13 +1183,13 @@ window.__ModuleLoader__.load({
             : running
               ? 'icb-dot warn'
               : 'icb-dot';
-    
+
         const label = !active
           ? t('chipEnable')
           : loading
             ? t('starting')
-            : (status.activeCanvas?.title || status.project?.title || t('tabTitle'));
-    
+            : status.readOnly ? t('statusReadOnly') : (status.activeCanvas?.title || status.project?.title || t('tabTitle'));
+
         return h('button', {
           type: 'button',
           className: 'icb-chip',
@@ -1133,7 +1201,7 @@ window.__ModuleLoader__.load({
         );
       };
     }
-    
+
     // --- src/client/entry.js ---
     const LOCALE_DICT = {
       zh: {
@@ -1142,6 +1210,7 @@ window.__ModuleLoader__.load({
         statusInactive: '未初始化',
         statusConnected: '已连接',
         statusConnecting: '等待画布连接',
+        statusReadOnly: '只读预览',
         statusStopped: '未启动',
         noSessionTitle: '请先选择或新建一个会话',
         noSessionDesc: '无限画布按会话工作目录绑定，打开任意文件夹会话即可使用。',
@@ -1151,7 +1220,7 @@ window.__ModuleLoader__.load({
         loadingTitle: '正在准备无限画布...',
         loadingDesc: '正在检查当前文件夹工程并连接本地 Infinite Canvas 服务。',
         initTitle: '将当前文件夹设为无限画布工程',
-        initDesc: '初始化后会创建 .infinite-canvas.json，并将画布、图片、视频与音频持久化保存在当前目录的 .infinite-canvas/ 中（模型凭据保存在全局共享目录，不会写入工程目录）。',
+        initDesc: '初始化后会创建 .infinite-canvas.json，并将画布、图片、视频与音频持久化保存在当前目录的 .infinite-canvas/ 中。',
         projectTitleLabel: '工程名称（可选）',
         projectTitlePlaceholder: '留空则使用当前文件夹名',
         initButton: '初始化并打开画布',
@@ -1161,7 +1230,16 @@ window.__ModuleLoader__.load({
         serverNotRunning: '服务尚未启动。',
         startServer: '启动服务',
         starting: '启动中...',
-        library: '画布库',
+        newSessionDefault: '新会话首次打开画布时',
+        alreadyOpen: '已打开',
+        default_blank: '新建空白画布',
+        default_open: '连接已打开的画布（多个时选择）',
+        default_choose: '每次选择',
+        selectCanvas: '选择已有画布，或新建空白画布',
+        credentialHint: '凭据位置取决于后端是否启用共享配置。',
+        localCredentials: '后端未确认共享凭据目录。复制工程前请检查 private/。',
+        legacyBusy: '兼容模式一次只允许一个编辑窗口。请在原会话切到画布库以释放编辑器。',
+        library: '更换 / 释放画布',
         newCanvas: '新建画布',
         reload: '刷新',
         restart: '重启服务',
@@ -1180,7 +1258,7 @@ window.__ModuleLoader__.load({
         runModeDev: '开发热更新模式（tsx + Vite）',
         npxPackage: 'npx 包名',
         externalUrl: '外部服务地址',
-        useSharedConfigDir: '启用全局共享配置目录（跨工程共享模型渠道/API Key，且不写入项目文件夹）',
+        useSharedConfigDir: '后端支持时，将模型渠道和密钥保存在共享目录',
         sharedConfigDir: '共享配置目录路径',
         cancel: '取消',
         save: '保存并应用',
@@ -1195,6 +1273,7 @@ window.__ModuleLoader__.load({
         statusInactive: 'Not initialized',
         statusConnected: 'Connected',
         statusConnecting: 'Connecting',
+        statusReadOnly: 'Read-only preview',
         statusStopped: 'Stopped',
         noSessionTitle: 'Select or start a session first',
         noSessionDesc: 'Infinite Canvas binds to your session working directory.',
@@ -1204,7 +1283,7 @@ window.__ModuleLoader__.load({
         loadingTitle: 'Preparing Infinite Canvas...',
         loadingDesc: 'Checking project directory and starting the local Infinite Canvas server.',
         initTitle: 'Initialize folder as an Infinite Canvas project',
-        initDesc: 'Creates .infinite-canvas.json and persists canvases and generated media in .infinite-canvas/ inside this folder, while keeping API keys in your shared config directory.',
+        initDesc: 'Creates .infinite-canvas.json and persists canvases and generated media in .infinite-canvas/ inside this folder.',
         projectTitleLabel: 'Project title (optional)',
         projectTitlePlaceholder: 'Defaults to current folder name',
         initButton: 'Initialize & open canvas',
@@ -1214,7 +1293,16 @@ window.__ModuleLoader__.load({
         serverNotRunning: 'Local server is not running.',
         startServer: 'Start server',
         starting: 'Starting...',
-        library: 'Library',
+        newSessionDefault: 'First canvas for a new session',
+        alreadyOpen: 'Open',
+        default_blank: 'Start a blank canvas',
+        default_open: 'Use the open canvas, or choose if ambiguous',
+        default_choose: 'Always choose',
+        selectCanvas: 'Choose a canvas or start a blank one',
+        credentialHint: 'Credential storage depends on backend support for shared configuration.',
+        localCredentials: 'Shared credential storage is unconfirmed. Check private/ before sharing the folder.',
+        legacyBusy: 'Compatibility mode allows one editor. Open the picker in the other session to release it.',
+        library: 'Switch / release',
         newCanvas: 'New',
         reload: 'Reload',
         restart: 'Restart',
@@ -1233,7 +1321,7 @@ window.__ModuleLoader__.load({
         runModeDev: 'Dev hot-reload mode (tsx + Vite)',
         npxPackage: 'npx package spec',
         externalUrl: 'External server URL',
-        useSharedConfigDir: 'Share model channels & credentials globally (keeps secrets out of project folders)',
+        useSharedConfigDir: 'Store channels and credentials in the shared directory when supported',
         sharedConfigDir: 'Shared config directory',
         cancel: 'Cancel',
         save: 'Save & apply',
@@ -1243,12 +1331,12 @@ window.__ModuleLoader__.load({
         chipInactiveTip: 'Initialize this folder as a persistent Infinite Canvas project',
       },
     };
-    
+
     function createClientPlugin(React) {
       const h = React.createElement;
       const CanvasSurface = createCanvasSurface(React);
       const SessionChip = createSessionChip(React);
-    
+
       function CanvasIcon() {
         return h('svg', {
           width: 16,
@@ -1268,7 +1356,7 @@ window.__ModuleLoader__.load({
           h('path', { d: 'M9 17.5h5' }),
         );
       }
-    
+
       return {
         inject: ['slots', 'sessions', 'connection', 'locale'],
         apply(ctx) {
@@ -1280,25 +1368,25 @@ window.__ModuleLoader__.load({
             document.head.appendChild(styleEl);
             return () => styleEl.remove();
           }, `${PLUGIN_ID}: styles`);
-    
+
           ctx.effect(() => ctx.locale.register(PLUGIN_NS, LOCALE_DICT), `${PLUGIN_ID}: locale`);
           const t = ctx.locale.bind(PLUGIN_NS);
-    
+
           const rpc = createBridgeRpcClient();
           const store = createBridgeStore(ctx, rpc);
           ctx.effect(() => () => store.dispose(), `${PLUGIN_ID}: store`);
-    
+
           // Optional layout service for fallback panel selection
           ctx.inject(['layout'], (layoutCtx) => {
             store.attachLayout(layoutCtx.layout);
             layoutCtx.effect(() => () => store.attachLayout(null), `${PLUGIN_ID}: detach layout`);
           });
-    
+
           // 1. Right-sidebar persistent tab (side-by-side chat + live canvas)
           ctx.inject(['sidebarRight', 'sidebarRightTabs'], (srCtx) => {
             store.attachSidebarRight(srCtx.sidebarRight);
             srCtx.effect(() => () => store.attachSidebarRight(null), `${PLUGIN_ID}: detach sidebarRight`);
-    
+
             srCtx.effect(() => srCtx.sidebarRightTabs.register({
               id: PLUGIN_ID,
               kind: TAB_KIND,
@@ -1313,7 +1401,7 @@ window.__ModuleLoader__.load({
                 icon: CanvasIcon,
               }],
             }), `${PLUGIN_ID}: right-sidebar tab type`);
-    
+
             srCtx.effect(() => srCtx.slots.inject('sidebar.right.pane.tab', () => srCtx.slots.register({
               name: 'sidebar.right.pane.tab',
               key: PLUGIN_ID,
@@ -1326,7 +1414,7 @@ window.__ModuleLoader__.load({
                 t,
               });
             })), `${PLUGIN_ID}: right-sidebar body slot`);
-    
+
             srCtx.effect(() => srCtx.slots.inject('sidebar.right.pane.tab.title', () => srCtx.slots.register({
               name: 'sidebar.right.pane.tab.title',
               key: PLUGIN_ID,
@@ -1335,7 +1423,7 @@ window.__ModuleLoader__.load({
               return h('span', { className: 'icb-pane-tab-title' }, t('tabTitle'));
             })), `${PLUGIN_ID}: right-sidebar title slot`);
           });
-    
+
           // 2. Composer left-side binding chip
           try {
             ctx.effect(() => ctx.slots.inject('conversation.input.left', () => ctx.slots.register({
@@ -1353,13 +1441,13 @@ window.__ModuleLoader__.load({
           } catch {
             // Older DSH without conversation.input.left slot
           }
-    
+
           // 3. Conversation top view tab (shown automatically when folder has .infinite-canvas.json)
           ctx.inject(['uiConversation'], (convCtx) => {
             convCtx.effect(() => convCtx.uiConversation.views.register(PANEL_ID, {
               build: () => ({ ready: true }),
             }), `${PLUGIN_ID}: conversation view target`);
-    
+
             function ConversationCanvasView(props) {
               return h(CanvasSurface, {
                 host: 'view',
@@ -1368,7 +1456,7 @@ window.__ModuleLoader__.load({
                 t,
               });
             }
-    
+
             let disposeViewSlot = null;
             const syncViewTab = () => {
               const sid = store.getForegroundSessionId();
@@ -1390,7 +1478,7 @@ window.__ModuleLoader__.load({
                 void fn();
               }
             };
-    
+
             const unsub = store.subscribeGlobal(syncViewTab);
             convCtx.effect(() => () => {
               unsub();
@@ -1402,7 +1490,7 @@ window.__ModuleLoader__.load({
             }, `${PLUGIN_ID}: dynamic conversation.view tab`);
             syncViewTab();
           });
-    
+
           // 4. Fullscreen main view + left rail entry
           try {
             ctx.effect(() => ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
@@ -1412,7 +1500,7 @@ window.__ModuleLoader__.load({
               label: () => t('tabTitle'),
               locale: PLUGIN_NS,
             }, CanvasIcon)), `${PLUGIN_ID}: left sidebar entry`);
-    
+
             ctx.effect(() => ctx.slots.inject('main', () => ctx.slots.register({
               name: 'main',
               key: PANEL_ID,
@@ -1430,7 +1518,7 @@ window.__ModuleLoader__.load({
         },
       };
     }
-    
+
     return createClientPlugin(React);
   },
 });

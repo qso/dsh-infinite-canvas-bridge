@@ -18,6 +18,14 @@ Infinite Canvas v1.0+ ships a clean local server with disk persistence (`FsStora
 - **Node-first AI generation**: The agent queries configured models (`canvas_list_models`) and triggers generation directly through canvas nodes so every prompt, reference link, and parameter remains inspectable and editable.
 - **Works with official upstream AND custom forks**: Supports `npx @basketikun/infinite-canvas@latest` out of the box, or point `repoPath` to your own customized Infinite Canvas fork without editing plugin code.
 
+## How a chat connects to a canvas
+
+A folder can contain several canvases. The first time a new DSH chat opens the workbench, it starts a blank canvas. Returning to the chat restores its selection. Use the toolbar picker to release a canvas, open an existing one in the folder, or start another. Collapsing the sidebar keeps the editor connected.
+
+In Settings, `newSessionCanvas` accepts `blank`, `open` or `choose`. With `open`, a single identifiable open canvas is selected automatically. Otherwise the picker opens. With `choose`, the chat always starts at the picker. Per-chat selections are stored in the data directory under `.dsh-sessions/`.
+
+Backends advertising `projectEditors` allow chats to edit different canvases concurrently. A second chat opening the same canvas sees a read-only preview of saved nodes, images and connections. Release the original editor, then request editing in the preview. Official v1.0.0 uses a single embedded editor and suspends agent tools when multiple canvas clients are connected. Its credentials may be stored in the project's `private/` directory. Check this directory before sharing a workspace.
+
 ## Requirements & External Dependencies
 
 1. **DeepSeek Harness** (`0.2.x+`)

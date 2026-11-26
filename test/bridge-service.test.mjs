@@ -9,12 +9,29 @@ import {
   InfiniteCanvasBridgeService,
   deriveClientIdForSession,
 } from '../src/host/bridge-service.js';
-import { initCanvasProjectInDir, resolveCanvasProjectScope } from '../src/host/scope-resolver.js';
+import { initCanvasProjectInDir } from '../src/host/scope-resolver.js';
 
 function startMockBridgeBackend(expectedClientId) {
   const receivedCalls = [];
+  const projects = new Map([['proj_live_1', { id: 'proj_live_1', title: 'Live Canvas' }]]);
   return new Promise((resolve) => {
     const server = http.createServer(async (req, res) => {
+      if (req.url.startsWith('/api/storage/projects/')) {
+        const key = req.url.split('/').pop();
+        if (req.method === 'PUT') {
+          const chunks = [];
+          for await (const chunk of req) chunks.push(chunk);
+          projects.set(key, JSON.parse(Buffer.concat(chunks)).value);
+        }
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify(projects.has(key) ? { key, value: projects.get(key) } : null));
+        return;
+      }
+      if (req.url === '/api/storage/projects') {
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify([...projects].map(([key, value]) => ({ key, value }))));
+        return;
+      }
       if (req.url === '/health') {
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(JSON.stringify({
@@ -62,7 +79,7 @@ function startMockBridgeBackend(expectedClientId) {
   });
 }
 
-test('bridge routes tool calls strictly by per-session clientId and syncs projectId to .infinite-canvas.json', async () => {
+test('bridge routes tool calls strictly by per-session clientId and remembers each session independently', async () => {
   const sessionId = 'session-alpha-001';
   const clientId = deriveClientIdForSession(sessionId);
   assert.notEqual(clientId, deriveClientIdForSession('session-beta-002'));
@@ -79,6 +96,15 @@ test('bridge routes tool calls strictly by per-session clientId and syncs projec
       { userConfigPath },
     );
 
+    const first = (await service.selectCanvas(scope, sessionId)).projectId;
+    assert.notEqual(first, 'proj_live_1');
+    const second = (await service.selectCanvas(scope, 'another')).projectId;
+    assert.notEqual(first, second);
+    assert.equal((await service.selectCanvas(scope, sessionId)).projectId, first);
+    const restored = new InfiniteCanvasBridgeService({ backendMode: 'external', externalUrl: mock.url }, { userConfigPath });
+    assert.equal((await restored.selectCanvas(scope, sessionId)).projectId, first);
+    await restored.dispose();
+    await service.selectCanvas(scope, sessionId, 'resume', 'proj_live_1');
     const status = await service.getStatus(scope, sessionId, { autoStart: false });
     assert.equal(status.active, true);
     assert.equal(status.clientConnected, true);
@@ -93,10 +119,11 @@ test('bridge routes tool calls strictly by per-session clientId and syncs projec
     assert.equal(mock.receivedCalls[0].projectId, 'proj_live_1');
     assert.deepEqual(mock.receivedCalls[0].input, { selectedOnly: true });
 
-    // Wait briefly for async manifest sync
-    await new Promise((r) => setTimeout(r, 50));
-    const persisted = await resolveCanvasProjectScope(projectDir);
-    assert.equal(persisted.defaultProjectId, 'proj_live_1');
+    await assert.rejects(service.callCanvasTool(scope, sessionId, 'canvas_get_state', { projectId: first }), /changed/);
+    await service.selectCanvas(scope, sessionId, 'choose');
+    assert.equal((await service.getStatus(scope, sessionId)).iframeUrl, null);
+    await assert.rejects(service.callCanvasTool(scope, sessionId, 'canvas_get_state'), /select/);
+    assert.notEqual((await service.selectCanvas(scope, sessionId, 'new')).projectId, first);
 
     // Open UI intent lifecycle
     const intent = service.requestOpenUi(sessionId, { mode: 'new' });
@@ -109,6 +136,30 @@ test('bridge routes tool calls strictly by per-session clientId and syncs projec
     await mock.close();
     await fs.rm(tmp, { recursive: true, force: true });
   }
+});
+
+test('simultaneous first opens create one document and release survives a bridge restart', async t => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'icb-selection-'));
+  const mock = await startMockBridgeBackend('editor');
+  t.after(async () => { await mock.close(); await fs.rm(tmp, { recursive: true, force: true }); });
+  const { scope } = await initCanvasProjectInDir(tmp);
+  const config = { backendMode: 'external', externalUrl: mock.url };
+  const options = { userConfigPath: path.join(tmp, 'settings.json') };
+  const service = new InfiniteCanvasBridgeService(config, options);
+  const [a, b] = await Promise.all([service.selectCanvas(scope, 'session'), service.selectCanvas(scope, 'session')]);
+  assert.equal(a.projectId, b.projectId);
+  assert.equal((await service.listProjects(scope)).length, 2);
+  await service.selectCanvas(scope, 'session', 'choose');
+  await service.dispose();
+  const next = new InfiniteCanvasBridgeService(config, options);
+  t.after(() => next.dispose());
+  assert.equal((await next.selectCanvas(scope, 'session')).projectId, null);
+  await next.updateUserConfig({ newSessionCanvas: 'open' });
+  assert.equal((await next.selectCanvas(scope, 'other')).projectId, 'proj_live_1');
+  assert.equal((await next.listProjects(scope)).find(row => row.id === 'proj_live_1').open, true);
+  await next.updateUserConfig({ newSessionCanvas: 'choose' });
+  assert.equal((await next.selectCanvas(scope, 'third')).projectId, null);
+  assert.equal((await next.listProjects(scope)).length, 2);
 });
 
 test('built client.js registers a valid DSH browser module factory', async () => {

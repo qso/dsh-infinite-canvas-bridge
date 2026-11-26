@@ -47,7 +47,7 @@ export function createSessionChip(React) {
       ? t('chipEnable')
       : loading
         ? t('starting')
-        : (status.activeCanvas?.title || status.project?.title || t('tabTitle'));
+        : status.readOnly ? t('statusReadOnly') : (status.activeCanvas?.title || status.project?.title || t('tabTitle'));
 
     return h('button', {
       type: 'button',

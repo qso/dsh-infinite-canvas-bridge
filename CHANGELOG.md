@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Remember each chat’s canvas selection, start new chats on a blank canvas by default, and offer an existing-canvas picker.
+- Support per-canvas editor handoff and read-only previews on enhanced backends. Target the embedded page explicitly on stock v1.0.0.
+- Verify workspace identity before reusing a server and report launch failures inside DSH.
+- Import chat image attachments, return saved multimodal image blocks, and assemble the canvas instructions in DSH 0.2.2.
+
 ## [0.1.0] - 2026-11-26
 
 ### Added

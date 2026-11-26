@@ -9,10 +9,10 @@ import {
   diagnoseBackend,
   probeCanvasServer,
 } from './process-manager.js';
-import {
-  initCanvasProjectInDir,
-  updateDefaultProjectId,
-} from './scope-resolver.js';
+import { initCanvasProjectInDir } from './scope-resolver.js';
+
+import { createLegacyView } from './legacy-view.js';
+import { listProjects, selectProject } from './canvas-selection.js';
 
 export function deriveClientIdForSession(sessionId) {
   const safe = String(sessionId || 'default').replace(/[^A-Za-z0-9._:-]/g, '').slice(0, 32);
@@ -25,7 +25,6 @@ export class InfiniteCanvasBridgeService {
     this.pluginConfig = pluginConfig && typeof pluginConfig === 'object' ? pluginConfig : {};
     this.userConfigPath = options.userConfigPath;
     this.processManager = new CanvasProcessManager(() => this.getConfig());
-    /** @type {Map<string, { clientId: string, projectId: string | null, openSeq: number, openIntent: { seq: number, mode: string, projectId: string | null, requestedAt: number } | null }>} */
     this.sessions = new Map();
   }
 
@@ -36,6 +35,7 @@ export class InfiniteCanvasBridgeService {
 
   async updateUserConfig(patch) {
     const allowedKeys = [
+      'newSessionCanvas',
       'backendMode',
       'repoPath',
       'repoRunMode',
@@ -72,13 +72,47 @@ export class InfiniteCanvasBridgeService {
     return state;
   }
 
-  setSessionProjectId(sessionId, projectId, scope = null) {
+  async selectCanvas(scope, sessionId, mode = 'resume', projectId = null) {
+    if (!scope?.active) throw new Error('Initialize the canvas folder first.');
+    if (projectId && (mode === 'new' || mode === 'choose')) throw new Error('Use a projectId or a selection mode, not both.');
     const binding = this.getSessionBinding(sessionId);
-    binding.projectId = typeof projectId === 'string' && projectId.trim() ? projectId.trim() : null;
-    if (scope?.active && binding.projectId) {
-      void updateDefaultProjectId(scope, binding.projectId).catch(() => {});
+    const select = async () => {
+      const { instance, probe } = await this.ensureStarted(scope);
+      const workspaceKey = JSON.stringify([scope.dataDir, instance.url, probe.config?.workspaceId]);
+      if (mode === 'resume' && !projectId && binding.workspaceKey === workspaceKey && binding.selected) return binding;
+      const config = await this.getConfig();
+      const openIds = [...new Set(Object.values(probe.health?.clientStates || {}).map(row => row?.projectId).filter(Boolean))];
+      if (!probe.capabilities.clientIdParam) {
+        for (const session of this.sessions.values()) {
+          if (session.workspaceKey === workspaceKey && session.legacyView?.clientId && session.projectId && !openIds.includes(session.projectId)) openIds.push(session.projectId);
+        }
+      }
+      binding.projectId = await selectProject(scope, { ...instance, workspaceId: probe.config?.workspaceId },
+        sessionId, mode, projectId, config.newSessionCanvas, openIds);
+      if (binding.legacyView && (!binding.projectId || binding.workspaceKey !== workspaceKey || probe.capabilities.clientIdParam)) {
+        await binding.legacyView.close();
+        binding.legacyView = null;
+      }
+      if (binding.projectId && !probe.capabilities.clientIdParam && !binding.legacyView) {
+        binding.legacyView = await createLegacyView(instance.url);
+      }
+      binding.workspaceKey = workspaceKey;
+      binding.selected = true;
+      binding.choosing = !binding.projectId;
+      return binding;
+    };
+    binding.pending = (binding.pending || Promise.resolve()).catch(() => {}).then(select);
+    return binding.pending;
+  }
+
+  async listProjects(scope) {
+    if (!scope?.active) throw new Error('Initialize the canvas folder first.');
+    const { instance, probe } = await this.ensureStarted(scope);
+    const open = new Set(Object.values(probe.health?.clientStates || {}).map(row => row?.projectId));
+    for (const session of this.sessions.values()) {
+      if (session.workspaceKey === JSON.stringify([scope.dataDir, instance.url, probe.config?.workspaceId]) && session.legacyView?.clientId) open.add(session.projectId);
     }
-    return binding;
+    return (await listProjects(instance)).map(row => ({ ...row, open: open.has(row.id) }));
   }
 
   requestOpenUi(sessionId, options = {}) {
@@ -86,8 +120,8 @@ export class InfiniteCanvasBridgeService {
     binding.openSeq += 1;
     binding.openIntent = {
       seq: binding.openSeq,
-      mode: options.mode || 'recent',
-      projectId: options.projectId || binding.projectId || null,
+      mode: options.mode || 'resume',
+      projectId: options.projectId || null,
       requestedAt: Date.now(),
     };
     return binding.openIntent;
@@ -101,15 +135,10 @@ export class InfiniteCanvasBridgeService {
     return { ok: true };
   }
 
-  buildIframeUrl(instance, binding, scope, options = {}) {
+  buildIframeUrl(instance, binding) {
     if (!instance?.url) return null;
-    const projectId = options.projectId || binding.projectId || scope?.defaultProjectId || null;
-    const mode = options.mode || (projectId ? null : 'recent');
-    const pathname = projectId ? `/canvas/${encodeURIComponent(projectId)}` : '/canvas';
-    const url = new URL(pathname, instance.url);
-    if (!projectId && mode) {
-      url.searchParams.set('mode', mode);
-    }
+    if (!binding.projectId || binding.choosing) return null;
+    const url = new URL('/canvas/' + encodeURIComponent(binding.projectId), binding.legacyView?.origin || instance.url);
     url.searchParams.set('embed', 'dsh');
     url.searchParams.set('dshClientId', binding.clientId);
     return url.toString();
@@ -143,7 +172,10 @@ export class InfiniteCanvasBridgeService {
     let startError = null;
 
     const existing = await this.processManager.checkExistingForDataDir(scope.dataDir);
-    if (existing.running) {
+    const compatible = config.effectiveBackend === 'external'
+      ? existing.instance?.url === config.externalUrl
+      : existing.instance?.backend !== 'external';
+    if (existing.running && compatible) {
       instance = existing.instance;
       probe = existing.probe;
     } else if (config.effectiveBackend === 'external' && backendDiag.ok && backendDiag.probe?.reachable) {
@@ -160,36 +192,17 @@ export class InfiniteCanvasBridgeService {
       }
     }
 
-    const clientStates = probe?.health?.clientStates && typeof probe.health.clientStates === 'object'
-      ? probe.health.clientStates
-      : null;
-
-    let clientConnected = false;
-    let activeCanvas = null;
-
-    if (probe?.reachable) {
-      if (clientStates) {
-        if (Object.prototype.hasOwnProperty.call(clientStates, binding.clientId)) {
-          clientConnected = true;
-          activeCanvas = clientStates[binding.clientId] || null;
-        }
-      } else {
-        // Upstream server without clientStates field: fall back to global client presence
-        clientConnected = Number(probe.health?.clients || 0) > 0;
-        activeCanvas = probe.health?.hasCanvas ? { projectId: binding.projectId || scope.defaultProjectId || null, title: null } : null;
-      }
+    if (instance && options.autoStart) {
+      await this.selectCanvas(scope, sessionId);
     }
-
-    if (activeCanvas?.projectId && activeCanvas.projectId !== binding.projectId) {
-      this.setSessionProjectId(sessionId, activeCanvas.projectId, scope);
-    }
-
-    const iframeUrl = instance
-      ? this.buildIframeUrl(instance, binding, scope, {
-          projectId: binding.openIntent?.projectId || undefined,
-          mode: binding.openIntent?.mode || undefined,
-        })
-      : null;
+    const workspaceKey = instance && JSON.stringify([scope.dataDir, instance.url, probe?.config?.workspaceId]);
+    const current = workspaceKey && binding.workspaceKey === workspaceKey;
+    const projectId = current ? binding.projectId : null;
+    const presence = probe?.health?.clientStates?.[binding.clientId];
+    const legacy = instance && !probe?.capabilities?.projectEditors;
+    const activeCanvas = projectId && presence?.projectId === projectId ? presence : null;
+    const clientConnected = Boolean((!legacy || probe?.health?.clients === 1) && activeCanvas || (projectId && binding.legacyView?.clientId && probe?.health?.clients === 1 && probe.health.hasCanvas));
+    const iframeUrl = current ? this.buildIframeUrl(instance, binding) : null;
 
     return {
       active: true,
@@ -205,7 +218,8 @@ export class InfiniteCanvasBridgeService {
       backend: backendDiag,
       binding: {
         clientId: binding.clientId,
-        projectId: binding.projectId || scope.defaultProjectId || null,
+        projectId,
+        choosing: Boolean(current && binding.choosing),
         openIntent: binding.openIntent,
       },
       instance: instance
@@ -220,6 +234,8 @@ export class InfiniteCanvasBridgeService {
           }
         : null,
       startError,
+      legacy,
+      readOnly: Boolean(projectId && !activeCanvas && probe?.health?.readOnlyClients?.[binding.clientId] === projectId),
       clientConnected,
       activeCanvas,
       iframeUrl,
@@ -250,38 +266,11 @@ export class InfiniteCanvasBridgeService {
       throw new Error('Current workspace is not an Infinite Canvas project (.infinite-canvas.json not found). Call canvas_init_project first.');
     }
     const config = await this.getConfig();
-    const { instance, probe } = await this.processManager.ensureRunning(scope);
+    const { instance } = await this.processManager.ensureRunning(scope);
     const binding = this.getSessionBinding(sessionId);
 
     const { projectId: inputProjectId, ...toolArgs } = input && typeof input === 'object' ? input : {};
-    const targetProjectId = typeof inputProjectId === 'string' && inputProjectId.trim()
-      ? inputProjectId.trim()
-      : binding.projectId || undefined;
-
-    // Resolve routing clientId: use exact session clientId when backend supports it
-    const liveProbe = await probeCanvasServer(instance.url, 2000);
-    const supportsPerClient = Boolean(liveProbe.capabilities?.clientIdParam || probe?.capabilities?.clientIdParam);
-    const clientStates = liveProbe.health?.clientStates;
-
-    let routeClientId = supportsPerClient ? binding.clientId : undefined;
-    if (supportsPerClient && clientStates) {
-      if (!Object.prototype.hasOwnProperty.call(clientStates, binding.clientId)) {
-        const connectedIds = Object.keys(clientStates);
-        if (connectedIds.length === 0) {
-          throw new Error(
-            'No Infinite Canvas view is currently connected for this session. Call canvas_open first or ask the user to open the Infinite Canvas tab in the right sidebar.',
-          );
-        }
-        // If another tab (e.g. external browser) is connected but the session iframe isn't, inform clearly
-        throw new Error(
-          `This session's embedded canvas (clientId=${binding.clientId}) is not open yet. Call canvas_open to open the right-sidebar canvas tab, wait a moment, then retry.`,
-        );
-      }
-    } else if (!liveProbe.health?.clients) {
-      throw new Error(
-        'No Infinite Canvas page is connected. Call canvas_open or open the Infinite Canvas panel first.',
-      );
-    }
+    const { routeClientId, targetProjectId } = await this.toolTarget(scope, instance, binding, inputProjectId);
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), config.toolTimeoutMs);
@@ -307,28 +296,48 @@ export class InfiniteCanvasBridgeService {
         throw new Error(`[${errCode}] ${errMsg}`);
       }
 
-      const result = body.result;
-      if (result && typeof result === 'object' && typeof result.projectId === 'string' && result.projectId) {
-        this.setSessionProjectId(sessionId, result.projectId, scope);
-      }
-      return result;
+      return body.result;
     } finally {
       clearTimeout(timer);
     }
   }
 
+  async toolTarget(scope, instance, binding, requestedId) {
+    const live = await probeCanvasServer(instance.url);
+    const expected = JSON.stringify([scope.dataDir, instance.url, live.config?.workspaceId]);
+    const targetProjectId = binding.projectId;
+    if (binding.workspaceKey !== expected || !targetProjectId || binding.choosing) throw new Error('Open or select a canvas for this session first.');
+    if (requestedId && requestedId !== targetProjectId) throw new Error('Canvas changed. Read the selected canvas again.');
+    if (!live.capabilities?.projectEditors && live.health?.clients !== 1) {
+      throw new Error('The backend has no editor locking. Keep only this canvas page open before using Agent tools.');
+    }
+    if (live.capabilities?.clientIdParam) {
+      if (live.health?.clientStates?.[binding.clientId]?.projectId !== targetProjectId) {
+        throw new Error('This session has no editable connection to the selected canvas. Open it or release the other editor first.');
+      }
+      return { routeClientId: binding.clientId, targetProjectId };
+    }
+    if (!live.reachable || live.health?.clients !== 1 || !live.health.hasCanvas) {
+      throw new Error('Compatibility mode requires exactly one open canvas page. Close other pages before editing.');
+    }
+    // Stock v1 verifies projectId inside the browser before executing every tool.
+    const routeClientId = binding.legacyView?.clientId;
+    if (!routeClientId) throw new Error('The embedded canvas is not connected. Open it in this session first.');
+    return { routeClientId, targetProjectId };
+  }
+
   async listCanvasPluginTools(scope, sessionId, signal = undefined) {
     if (!scope?.active) return [];
-    const { instance, probe } = await this.processManager.ensureRunning(scope);
+    const { instance } = await this.processManager.ensureRunning(scope);
     const binding = this.getSessionBinding(sessionId);
-    const supportsPerClient = Boolean(probe?.capabilities?.clientIdParam);
+    const { routeClientId, targetProjectId } = await this.toolTarget(scope, instance, binding);
 
     const response = await fetch(`${instance.url}/api/tools/list`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        ...(supportsPerClient ? { clientId: binding.clientId } : {}),
-        ...(binding.projectId ? { projectId: binding.projectId } : {}),
+        ...(routeClientId ? { clientId: routeClientId } : {}),
+        projectId: targetProjectId,
       }),
       signal,
     });
@@ -340,6 +349,8 @@ export class InfiniteCanvasBridgeService {
   }
 
   async dispose() {
+    await Promise.allSettled([...this.sessions.values()].map(binding => binding.pending));
+    await Promise.allSettled([...this.sessions.values()].map(binding => binding.legacyView?.close()));
     await this.processManager.disposeAll();
   }
 }

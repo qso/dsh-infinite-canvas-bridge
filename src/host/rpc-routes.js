@@ -75,7 +75,7 @@ export function registerRpcRoutes(ctx, bridgeService) {
             if (!scope.active) {
               return errorResult('canvas-bridge/inactive', 'Current workspace is not an Infinite Canvas project.');
             }
-            await bridgeService.ensureStarted(scope);
+            await bridgeService.selectCanvas(scope, sessionId);
             const status = await bridgeService.getStatus(scope, sessionId, { autoStart: false });
             return okResult(status);
           }
@@ -85,6 +85,7 @@ export function registerRpcRoutes(ctx, bridgeService) {
               return errorResult('canvas-bridge/inactive', 'Current workspace is not an Infinite Canvas project.');
             }
             await bridgeService.restartInstance(scope);
+            await bridgeService.selectCanvas(scope, sessionId);
             const status = await bridgeService.getStatus(scope, sessionId, { autoStart: false });
             return okResult(status);
           }
@@ -98,10 +99,13 @@ export function registerRpcRoutes(ctx, bridgeService) {
             return okResult(status);
           }
 
-          case 'setActiveProject': {
-            const binding = bridgeService.setSessionProjectId(sessionId, payload.projectId, scope);
-            return okResult({ binding });
+          case 'selectCanvas': {
+            if (!['resume', 'new', 'recent', 'choose'].includes(payload.mode)) throw new Error('Invalid canvas selection.');
+            await bridgeService.selectCanvas(scope, sessionId, payload.mode, payload.projectId);
+            return okResult(await bridgeService.getStatus(scope, sessionId));
           }
+          case 'listProjects':
+            return okResult(await bridgeService.listProjects(scope));
 
           case 'ackUiAction': {
             return okResult(bridgeService.ackUiAction(sessionId, payload.seq));

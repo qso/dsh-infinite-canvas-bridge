@@ -57,6 +57,7 @@ export async function probeCanvasServer(baseUrl, timeoutMs = 2500) {
     if (!healthRes.ok) return { reachable: false };
     const health = await healthRes.json();
     const config = configRes && configRes.ok ? await configRes.json().catch(() => null) : null;
+    if (health?.ok !== true || !Number.isInteger(health.protocolVersion)) return { reachable: false };
     return {
       reachable: true,
       url: baseUrl,
@@ -64,6 +65,7 @@ export async function probeCanvasServer(baseUrl, timeoutMs = 2500) {
       config,
       protocolVersion: health?.protocolVersion ?? config?.protocolVersion ?? null,
       capabilities: {
+        projectEditors: Boolean(config?.capabilities?.projectEditors),
         dshEmbed: Boolean(config?.capabilities?.dshEmbed),
         clientIdParam: Boolean(config?.capabilities?.clientIdParam),
         sharedConfigDir: Boolean(config?.capabilities?.sharedConfigDir),
@@ -77,10 +79,20 @@ export async function probeCanvasServer(baseUrl, timeoutMs = 2500) {
   }
 }
 
+async function matchesWorkspace(dataDir, probe) {
+  if (!probe.reachable || !probe.config?.workspaceId) return false;
+  try {
+    const manifest = JSON.parse(await fs.readFile(path.join(dataDir, 'workspace.json'), 'utf8'));
+    return manifest.id === probe.config.workspaceId;
+  } catch {
+    return false;
+  }
+}
+
 async function detectRepoCliFlags(repoPath, entryPath) {
   try {
     const cliSource = path.join(repoPath, 'apps', 'cli', 'src', 'cli.ts');
-    const target = (await fileExists(cliSource)) ? cliSource : entryPath;
+    const target = entryPath?.endsWith('.ts') ? cliSource : entryPath;
     if (!target || !(await fileExists(target))) {
       return { supportsSharedConfigDir: false, supportsNoSaveConfig: false };
     }
@@ -212,7 +224,9 @@ export class CanvasProcessManager {
     this.instances = new Map();
     /** @type {Map<string, Promise<any>>} */
     this.starting = new Map();
+    this.processGroups = new WeakSet();
     this.disposing = false;
+    this.launchQueue = Promise.resolve();
   }
 
   getInstanceState(dataDir) {
@@ -237,7 +251,8 @@ export class CanvasProcessManager {
     const existing = this.instances.get(key);
     if (existing?.url) {
       const probe = await probeCanvasServer(existing.url);
-      if (probe.reachable) {
+      const owned = existing.managed && existing.child?.exitCode === null && existing.child?.signalCode === null;
+      if (probe.reachable && (existing.backend === 'external' || (probe.config?.workspaceId ? await matchesWorkspace(key, probe) : owned))) {
         existing.capabilities = probe.capabilities;
         existing.lastError = null;
         return { running: true, instance: existing, probe };
@@ -251,9 +266,9 @@ export class CanvasProcessManager {
     const urlFile = path.join(key, '.canvas.url');
     try {
       const savedUrl = (await fs.readFile(urlFile, 'utf8')).trim();
-      if (savedUrl && /^https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):\d+/i.test(savedUrl)) {
+      if (savedUrl && /^https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):\d+$/i.test(savedUrl)) {
         const probe = await probeCanvasServer(savedUrl);
-        if (probe.reachable) {
+        if (await matchesWorkspace(key, probe)) {
           const port = Number(new URL(savedUrl).port) || null;
           const adopted = {
             dataDir: key,
@@ -290,6 +305,9 @@ export class CanvasProcessManager {
         throw new Error(diag.message);
       }
       const key = path.resolve(scope.dataDir);
+      const previous = this.instances.get(key);
+      if (previous?.managed && previous.url === diag.url) return { instance: previous, probe: diag.probe };
+      if (previous?.managed) await this.stopForDataDir(key);
       const extInst = {
         dataDir: key,
         url: diag.url,
@@ -307,6 +325,7 @@ export class CanvasProcessManager {
     }
 
     const key = path.resolve(scope.dataDir);
+    if (this.instances.get(key)?.backend === 'external') this.instances.delete(key);
     const already = await this.checkExistingForDataDir(key);
     if (already.running) {
       return { instance: already.instance, probe: already.probe };
@@ -316,9 +335,13 @@ export class CanvasProcessManager {
       return await this.starting.get(key);
     }
 
-    const startPromise = this.#spawnForScope(scope, config).finally(() => {
+    const startPromise = this.launchQueue.then(() => {
+      if (this.disposing) throw new Error('Bridge plugin is shutting down.');
+      return this.#spawnForScope(scope, config);
+    }).finally(() => {
       this.starting.delete(key);
     });
+    this.launchQueue = startPromise.catch(() => {});
     this.starting.set(key, startPromise);
     return await startPromise;
   }
@@ -364,6 +387,7 @@ export class CanvasProcessManager {
       env.INFINITE_CANVAS_REPO_ROOT = config.repoPath;
       cwd = diag.cwd;
       if (diag.repoRunMode === 'built') {
+        if (process.versions.electron) env.ELECTRON_RUN_AS_NODE = '1';
         command = process.execPath;
         args = [diag.entryPath, ...cliArgs];
       } else {
@@ -385,15 +409,20 @@ export class CanvasProcessManager {
       }
     };
 
+    const processGroup = diag.backend === 'npx' && process.platform !== 'win32';
     const child = spawn(command, args, {
+      detached: processGroup,
       cwd,
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
+    if (processGroup) this.processGroups.add(child);
     child.stdout?.on('data', pushLog);
     child.stderr?.on('data', pushLog);
 
+    let spawnError;
+    child.once('error', (error) => { spawnError = error; });
     let exitedEarly = null;
     child.once('exit', (code, signal) => {
       exitedEarly = { code, signal };
@@ -409,6 +438,7 @@ export class CanvasProcessManager {
     let probe = { reachable: false };
 
     while (Date.now() < deadline) {
+      if (spawnError) throw new Error(`Cannot launch ${command}: ${spawnError.message}`);
       if (exitedEarly) {
         const tail = logs.slice(-8).join('\n');
         throw new Error(
@@ -416,7 +446,10 @@ export class CanvasProcessManager {
         );
       }
       probe = await probeCanvasServer(url, 1500);
-      if (probe.reachable) break;
+      if (probe.reachable && (await matchesWorkspace(key, probe) ||
+          (!probe.config?.workspaceId && logs.some(line => line.includes('打开地址') && line.includes(url)) &&
+           (await fs.readFile(path.join(key, '.canvas.url'), 'utf8').catch(() => '')).trim() === url))) break;
+      probe = { reachable: false };
       await new Promise((r) => setTimeout(r, 250));
     }
 
@@ -450,6 +483,7 @@ export class CanvasProcessManager {
 
   async stopForDataDir(dataDir) {
     const key = path.resolve(dataDir);
+    await this.starting.get(key)?.catch(() => {});
     const inst = this.instances.get(key);
     if (!inst) return { stopped: false };
     this.instances.delete(key);
@@ -467,6 +501,7 @@ export class CanvasProcessManager {
 
   async disposeAll() {
     this.disposing = true;
+    await this.launchQueue;
     const tasks = [];
     for (const [key, inst] of this.instances.entries()) {
       this.instances.delete(key);
@@ -478,11 +513,12 @@ export class CanvasProcessManager {
   }
 
   async #killChild(child) {
-    if (!child || child.exitCode !== null || child.killed) return;
+    if (!child || child.exitCode !== null || child.signalCode !== null || child.killed) return;
+    const stop = signal => this.processGroups.has(child) && child.pid ? process.kill(-child.pid, signal) : child.kill(signal);
     await new Promise((resolve) => {
       const hardTimer = setTimeout(() => {
         try {
-          child.kill('SIGKILL');
+          stop('SIGKILL');
         } catch {
           // Ignore
         }
@@ -493,7 +529,7 @@ export class CanvasProcessManager {
         resolve();
       });
       try {
-        child.kill('SIGTERM');
+        stop('SIGTERM');
       } catch {
         clearTimeout(hardTimer);
         resolve();

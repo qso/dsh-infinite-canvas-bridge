@@ -271,6 +271,7 @@ export const CANVAS_BUILTIN_TOOLS = [
       properties: {
         ...PROJECT_ID_PROP,
         assetId: { type: 'string' },
+        attachmentId: { type: 'string', description: 'DSH conversation image from canvas_list_references. Use only one image source.' },
         storageKey: { type: 'string' },
         title: { type: 'string' },
         x: { type: 'number' },

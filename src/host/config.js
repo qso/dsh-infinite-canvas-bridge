@@ -94,6 +94,7 @@ export function normalizeBridgeConfig(pluginConfig = {}, userOverrides = {}, env
   return {
     backendMode,
     effectiveBackend,
+    newSessionCanvas: ['blank', 'open', 'choose'].includes(merged.newSessionCanvas) ? merged.newSessionCanvas : 'blank',
     repoPath,
     repoRunMode,
     externalUrl,
