@@ -1,0 +1,4 @@
+- insert:
+    - id: infinite-canvas-bridge
+      name: dsh-infinite-canvas-bridge
+      config: {}

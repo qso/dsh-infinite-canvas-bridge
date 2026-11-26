@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Infinite Canvas Bridge",
+    "description": "Connects DeepSeek Harness sessions to local persistent Infinite Canvas (v1.0+) folder projects. Embeds the interactive node canvas in the right sidebar alongside chat and exposes native canvas_* tools so the agent edits nodes and triggers generation automatically.",
+    "detail": "docs/DETAIL.md"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "无限画布桥接工作台",
+    "description": "将 DeepSeek Harness 会话与本地持久化 Infinite Canvas（v1.0+）文件夹工程深度连接：在右侧分栏与对话同屏嵌入可拖拽节点画布，仅在画布工程内按需注入原生 canvas_* 工具，实现边聊边让 Agent 自动编排节点并触发生成。支持官方 npx 版及自定义 Fork 魔改仓。",
+    "detail": "docs/DETAIL.zh.md"
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "name": "dsh-infinite-canvas-bridge",
+  "version": "0.1.0",
+  "description": "DeepSeek Harness bridge plugin for Infinite Canvas (v1.0+): folder-based persistent canvas projects, side-by-side right-pane workspace, per-session isolated routing, and native AI agent tools.",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "infinite-canvas",
+    "canvas",
+    "ai-image",
+    "ai-video",
+    "creative-studio"
+  ],
+  "license": "MIT",
+  "author": "qso",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/qso/dsh-infinite-canvas-bridge.git"
+  },
+  "homepage": "https://github.com/qso/dsh-infinite-canvas-bridge#readme",
+  "bugs": {
+    "url": "https://github.com/qso/dsh-infinite-canvas-bridge/issues"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "icon": "./icon.svg",
+  "exports": {
+    ".": "./src/host/index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "src",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "docs",
+    "skills",
+    "icon.svg",
+    "LICENSE",
+    "README.md",
+    "README.zh-CN.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "node scripts/build-client.mjs",
+    "test": "node --test test/*.test.mjs",
+    "check": "npm run build && npm test"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-session",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-sidebar-right"
+      ]
+    }
+  }
+}
