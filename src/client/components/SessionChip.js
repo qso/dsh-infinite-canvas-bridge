@@ -51,12 +51,12 @@ export function createSessionChip(React) {
 
     return h('button', {
       type: 'button',
-      className: `icb-chip${active && connected ? ' active' : ''}`,
+      className: 'icb-chip',
       onClick: handleClick,
       title: active ? `${t('chipActiveTip')}: ${status.project?.projectDir || ''}` : t('chipInactiveTip'),
     },
       h('span', { className: dotClass }),
-      h('span', null, label),
+      h('span', { className: 'icb-chip-label' }, label),
     );
   };
 }

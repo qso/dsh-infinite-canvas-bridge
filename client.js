@@ -285,33 +285,30 @@ window.__ModuleLoader__.load({
       align-items: center;
       gap: 6px;
       height: 28px;
-      padding: 0 10px;
+      padding: 0 12px;
       border-radius: 999px;
       border: 1px solid var(--dsw-alias-border-l2);
-      background: var(--dsw-alias-button-tool-bar-fill-invisible, transparent);
-      color: var(--dsw-alias-label-secondary);
+      background: var(--dsw-alias-bg-layer-1);
+      color: var(--dsw-alias-label-primary);
+      font: inherit;
       font-size: 12px;
       font-weight: 500;
-      line-height: 1;
+      line-height: 16px;
       cursor: pointer;
       white-space: nowrap;
-      transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+      max-width: 220px;
+      transition: background 120ms ease, border-color 120ms ease;
     }
     
     .icb-chip:hover {
-      background: var(--dsw-alias-button-tool-bar-hover, var(--dsw-alias-interactive-bg-hover));
-      color: var(--dsw-alias-label-primary);
+      background: var(--dsw-alias-interactive-bg-hover);
     }
     
-    .icb-chip.active {
-      background: var(--dsw-alias-button-ghost-active-fill, var(--dsw-alias-state-success-tertiary, var(--dsw-alias-interactive-bg-active)));
-      border-color: var(--dsw-alias-button-ghost-active-border, var(--dsw-alias-state-success-secondary, var(--dsw-alias-border-selected)));
-      color: var(--dsw-alias-label-primary);
-    }
-    
-    .icb-chip.active:hover {
-      background: var(--dsw-alias-button-ghost-active-hover, var(--dsw-alias-interactive-bg-hover));
-      color: var(--dsw-alias-label-primary);
+    .icb-chip-label {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     
     .icb-pane-tab-title {
@@ -1127,12 +1124,12 @@ window.__ModuleLoader__.load({
     
         return h('button', {
           type: 'button',
-          className: `icb-chip${active && connected ? ' active' : ''}`,
+          className: 'icb-chip',
           onClick: handleClick,
           title: active ? `${t('chipActiveTip')}: ${status.project?.projectDir || ''}` : t('chipInactiveTip'),
         },
           h('span', { className: dotClass }),
-          h('span', null, label),
+          h('span', { className: 'icb-chip-label' }, label),
         );
       };
     }
