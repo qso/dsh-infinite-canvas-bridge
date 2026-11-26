@@ -158,52 +158,57 @@ export function createClientPlugin(React) {
       const store = createBridgeStore(ctx, rpc);
       ctx.effect(() => () => store.dispose(), `${PLUGIN_ID}: store`);
 
+      // Optional layout service for fallback panel selection
+      ctx.inject(['layout'], (layoutCtx) => {
+        store.attachLayout(layoutCtx.layout);
+        layoutCtx.effect(() => () => store.attachLayout(null), `${PLUGIN_ID}: detach layout`);
+      });
+
       // 1. Right-sidebar persistent tab (side-by-side chat + live canvas)
-      try {
-        if (ctx.sidebarRightTabs && typeof ctx.sidebarRightTabs.register === 'function') {
-          ctx.effect(() => ctx.sidebarRightTabs.register({
-            id: PLUGIN_ID,
-            kind: TAB_KIND,
-            multiple: false,
-            keepMounted: true,
+      ctx.inject(['sidebarRight', 'sidebarRightTabs'], (srCtx) => {
+        store.attachSidebarRight(srCtx.sidebarRight);
+        srCtx.effect(() => () => store.attachSidebarRight(null), `${PLUGIN_ID}: detach sidebarRight`);
+
+        srCtx.effect(() => srCtx.sidebarRightTabs.register({
+          id: PLUGIN_ID,
+          kind: TAB_KIND,
+          multiple: false,
+          keepMounted: true,
+          title: () => t('tabTitle'),
+          guide: [{
+            id: 'open',
+            order: 30,
             title: () => t('tabTitle'),
-            guide: [{
-              id: 'open',
-              order: 30,
-              title: () => t('tabTitle'),
-              description: () => t('guideDesc'),
-              icon: CanvasIcon,
-            }],
-          }), `${PLUGIN_ID}: right-sidebar tab type`);
+            description: () => t('guideDesc'),
+            icon: CanvasIcon,
+          }],
+        }), `${PLUGIN_ID}: right-sidebar tab type`);
 
-          ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
-            name: 'sidebar.right.pane.tab',
-            key: PLUGIN_ID,
-            locale: PLUGIN_NS,
-          }, function RightPaneCanvas(props) {
-            return h(CanvasSurface, {
-              host: 'pane',
-              sessionId: props?.sessionId,
-              store,
-              t,
-            });
-          }));
+        srCtx.effect(() => srCtx.slots.inject('sidebar.right.pane.tab', () => srCtx.slots.register({
+          name: 'sidebar.right.pane.tab',
+          key: PLUGIN_ID,
+          locale: PLUGIN_NS,
+        }, function RightPaneCanvas(props) {
+          return h(CanvasSurface, {
+            host: 'pane',
+            sessionId: props?.sessionId,
+            store,
+            t,
+          });
+        })), `${PLUGIN_ID}: right-sidebar body slot`);
 
-          ctx.slots.inject('sidebar.right.pane.tab.title', () => ctx.slots.register({
-            name: 'sidebar.right.pane.tab.title',
-            key: PLUGIN_ID,
-            locale: PLUGIN_NS,
-          }, function RightPaneCanvasTitle() {
-            return h('span', { className: 'icb-pane-tab-title' }, t('tabTitle'));
-          }));
-        }
-      } catch {
-        // Older DSH without right sidebar tabs: gracefully degrade to fullscreen panel
-      }
+        srCtx.effect(() => srCtx.slots.inject('sidebar.right.pane.tab.title', () => srCtx.slots.register({
+          name: 'sidebar.right.pane.tab.title',
+          key: PLUGIN_ID,
+          locale: PLUGIN_NS,
+        }, function RightPaneCanvasTitle() {
+          return h('span', { className: 'icb-pane-tab-title' }, t('tabTitle'));
+        })), `${PLUGIN_ID}: right-sidebar title slot`);
+      });
 
       // 2. Composer left-side binding chip
       try {
-        ctx.slots.inject('conversation.input.left', () => ctx.slots.register({
+        ctx.effect(() => ctx.slots.inject('conversation.input.left', () => ctx.slots.register({
           name: 'conversation.input.left',
           id: `${PANEL_ID}-chip`,
           order: 42,
@@ -211,26 +216,74 @@ export function createClientPlugin(React) {
         }, function ComposerCanvasChip(props) {
           return h(SessionChip, {
             sessionId: props?.sessionId,
-            ctx,
             store,
             t,
           });
-        }));
+        })), `${PLUGIN_ID}: composer chip`);
       } catch {
         // Older DSH without conversation.input.left slot
       }
 
-      // 3. Fullscreen main view + left rail entry
+      // 3. Conversation top view tab (shown automatically when folder has .infinite-canvas.json)
+      ctx.inject(['uiConversation'], (convCtx) => {
+        convCtx.effect(() => convCtx.uiConversation.views.register(PANEL_ID, {
+          build: () => ({ ready: true }),
+        }), `${PLUGIN_ID}: conversation view target`);
+
+        function ConversationCanvasView(props) {
+          return h(CanvasSurface, {
+            host: 'view',
+            sessionId: props?.sessionId,
+            store,
+            t,
+          });
+        }
+
+        let disposeViewSlot = null;
+        const syncViewTab = () => {
+          const sid = store.getForegroundSessionId();
+          const snap = sid ? store.getStatusSnapshot(sid) : null;
+          const shouldShow = Boolean(sid && snap?.active);
+          if (shouldShow) {
+            if (!disposeViewSlot) {
+              disposeViewSlot = convCtx.slots.inject('conversation.view', () => convCtx.slots.register({
+                name: 'conversation.view',
+                id: PANEL_ID,
+                order: 18,
+                locale: PLUGIN_NS,
+                label: () => t('tabTitle'),
+              }, ConversationCanvasView));
+            }
+          } else if (disposeViewSlot) {
+            const fn = disposeViewSlot;
+            disposeViewSlot = null;
+            void fn();
+          }
+        };
+
+        const unsub = store.subscribeGlobal(syncViewTab);
+        convCtx.effect(() => () => {
+          unsub();
+          if (disposeViewSlot) {
+            const fn = disposeViewSlot;
+            disposeViewSlot = null;
+            void fn();
+          }
+        }, `${PLUGIN_ID}: dynamic conversation.view tab`);
+        syncViewTab();
+      });
+
+      // 4. Fullscreen main view + left rail entry
       try {
-        ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
+        ctx.effect(() => ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
           name: 'sidebar.panellist',
           id: PANEL_ID,
           order: 105,
           label: () => t('tabTitle'),
           locale: PLUGIN_NS,
-        }, CanvasIcon));
+        }, CanvasIcon)), `${PLUGIN_ID}: left sidebar entry`);
 
-        ctx.slots.inject('main', () => ctx.slots.register({
+        ctx.effect(() => ctx.slots.inject('main', () => ctx.slots.register({
           name: 'main',
           key: PANEL_ID,
           locale: PLUGIN_NS,
@@ -240,7 +293,7 @@ export function createClientPlugin(React) {
             store,
             t,
           });
-        }));
+        })), `${PLUGIN_ID}: fullscreen main view`);
       } catch {
         // Ignore if shell main/panellist slot unavailable
       }

@@ -4,7 +4,7 @@ export function createSessionChip(React) {
   const h = React.createElement;
   const { useEffect, useState } = React;
 
-  return function SessionChip({ sessionId, ctx, store, t }) {
+  return function SessionChip({ sessionId, store, t }) {
     const [, setTick] = useState(0);
     const status = sessionId ? store.getStatusSnapshot(sessionId) : null;
     const loading = sessionId ? store.isLoading(sessionId) : false;
@@ -24,33 +24,15 @@ export function createSessionChip(React) {
     const connected = Boolean(status?.clientConnected);
     const running = Boolean(status?.instance?.url);
 
-    function openCanvasPanel() {
-      try {
-        if (ctx.sidebarRight && typeof ctx.sidebarRight.openTab === 'function') {
-          ctx.sidebarRight.openTab(TAB_KIND);
-          return;
-        }
-      } catch {
-        // Fallback below
-      }
-      try {
-        if (ctx.layout && typeof ctx.layout.openPanel === 'function') {
-          ctx.layout.openPanel(TAB_KIND);
-        }
-      } catch {
-        // Ignore
-      }
-    }
-
     async function handleClick() {
       if (!active) {
-        openCanvasPanel();
+        store.openRightPaneCanvas();
         return;
       }
       if (!running) {
         void store.ensureStarted(sessionId).catch(() => {});
       }
-      openCanvasPanel();
+      store.openRightPaneCanvas();
     }
 
     const dotClass = !active

@@ -7,8 +7,38 @@ export function createBridgeStore(ctx, rpc) {
   const iframeOverrideBySession = new Map();
   const hostOwnerBySession = new Map(); // sessionId -> 'pane' | 'main'
   let foregroundSessionId = null;
+  let sidebarRightController = null;
+  let layoutController = null;
   let pollTimer = null;
   let disposed = false;
+
+  function attachSidebarRight(controller) {
+    sidebarRightController = controller || null;
+  }
+
+  function attachLayout(controller) {
+    layoutController = controller || null;
+  }
+
+  function openRightPaneCanvas() {
+    try {
+      if (sidebarRightController && typeof sidebarRightController.openTab === 'function') {
+        sidebarRightController.openTab('infinite-canvas-bridge');
+        return true;
+      }
+    } catch {
+      // Ignore and try fallback
+    }
+    try {
+      if (layoutController && typeof layoutController.selectPanel === 'function') {
+        layoutController.selectPanel('infinite-canvas-bridge');
+        return true;
+      }
+    } catch {
+      // Ignore
+    }
+    return false;
+  }
 
   function emitGlobal() {
     for (const fn of globalListeners) {
@@ -40,11 +70,17 @@ export function createBridgeStore(ctx, rpc) {
         const cur = s.getCurrent();
         if (cur?.id) return cur.id;
       }
-      if (ctx.sidebarRight?.mounted) {
-        const m = typeof ctx.sidebarRight.mounted === 'function' ? ctx.sidebarRight.mounted() : ctx.sidebarRight.mounted;
+      if (sidebarRightController?.mounted) {
+        const m = typeof sidebarRightController.mounted === 'function'
+          ? sidebarRightController.mounted()
+          : sidebarRightController.mounted;
         if (typeof m === 'string' && m) return m;
         if (m && typeof m.get === 'function') {
           const val = m.get();
+          if (typeof val === 'string' && val) return val;
+        }
+        if (m && typeof m.getSnapshot === 'function') {
+          const val = m.getSnapshot();
           if (typeof val === 'string' && val) return val;
         }
       }
@@ -121,13 +157,7 @@ export function createBridgeStore(ctx, rpc) {
       }
       setIframeUrlOverride(sessionId, targetUrl.toString());
     }
-    try {
-      if (ctx.sidebarRight && typeof ctx.sidebarRight.openTab === 'function') {
-        ctx.sidebarRight.openTab('infinite-canvas-bridge');
-      }
-    } catch {
-      // Older DSH without sidebarRight
-    }
+    openRightPaneCanvas();
   }
 
   async function refreshStatus(sessionId, options = {}) {
@@ -258,6 +288,9 @@ export function createBridgeStore(ctx, rpc) {
   }, 2200);
 
   return {
+    attachSidebarRight,
+    attachLayout,
+    openRightPaneCanvas,
     getForegroundSessionId: () => readForegroundSessionId(),
     setForegroundSessionId,
     getStatusSnapshot,
